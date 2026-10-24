@@ -18,8 +18,8 @@ const SESSION_SECRET =
   process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'mbl-secret-session-salt-987456123-antigravity';
 
-// Expected 4-digit PIN (defaults to 2468 in development)
-const EXPECTED_PIN = process.env.ADMIN_PIN || '2468';
+// Expected 4-digit PIN (defaults to 7714 in development, or process.env.ADMIN_PIN)
+const EXPECTED_PIN = process.env.ADMIN_PIN || '7714';
 
 // In-memory rate limiting tracker: ip -> { count: number, lockedUntil: number }
 interface RateLimitRecord {

@@ -16,7 +16,7 @@ interface AdminDashboardProps {
 
 export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [session, setSession]             = useState<StorySessionState | null>(null);
-  const [visitorCode, setVisitorCode]     = useState<string>('472');
+  const [visitorCode, setVisitorCode]     = useState<string>('739');
   const [loading, setLoading]             = useState(true);
   const [savingAction, setSavingAction]   = useState<string | null>(null);
   const [bannerNotice, setBannerNotice]   = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -147,7 +147,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const handleSaveVisitorCode = () => {
     const trimmed = newCodeInput.trim();
     if (!/^\d{3}$/.test(trimmed)) {
-      setBannerNotice({ type: 'error', text: 'Visitor passcode must be exactly 3 numeric digits (e.g. 472).' });
+      setBannerNotice({ type: 'error', text: 'Visitor passcode must be exactly 3 numeric digits (e.g. 739).' });
       return;
     }
     executeCommand({ type: 'SET_VISITOR_CODE', code: trimmed }, 'Visitor code updated');

@@ -47,7 +47,7 @@ export function getDefaultStoryConfig(): StoryConfig {
       return {
         id: 'dev-config',
         scheduled_at: scheduled,
-        access_code: urlParams.get('code') || '472',
+        access_code: '***',
         is_enabled: true,
         story_title: 'Our Story',
         created_at: new Date().toISOString(),
@@ -58,13 +58,12 @@ export function getDefaultStoryConfig(): StoryConfig {
 
   // Fallback to environment variable or 24h future schedule
   const envScheduled = process.env.NEXT_PUBLIC_SCHEDULED_AT;
-  const envCode      = process.env.NEXT_PUBLIC_ACCESS_CODE || '472';
   const defaultFutureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   return {
     id: 'default-config',
     scheduled_at: envScheduled || defaultFutureDate,
-    access_code: envCode,
+    access_code: '***',
     is_enabled: true,
     story_title: 'A Story for You',
     created_at: new Date().toISOString(),
@@ -82,15 +81,21 @@ export async function fetchStoryConfig(): Promise<StoryConfig> {
   if (supabase) {
     try {
       const { data, error } = await supabase
-        .from('story_config')
-        .select('*')
-        .eq('is_enabled', true)
-        .order('created_at', { ascending: false })
-        .limit(1)
+        .from('story_sessions')
+        .select('session_id, scheduled_at, story_title, created_at, updated_at')
+        .eq('session_id', 'session_primary')
         .maybeSingle();
 
       if (!error && data) {
-        return data as StoryConfig;
+        return {
+          id: data.session_id,
+          scheduled_at: data.scheduled_at,
+          access_code: '***',
+          is_enabled: true,
+          story_title: data.story_title,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        };
       }
       if (error) {
         console.warn('[supabase] fetchStoryConfig warning:', error.message);
