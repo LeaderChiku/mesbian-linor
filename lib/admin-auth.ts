@@ -12,10 +12,12 @@ import { createHmac, timingSafeEqual } from 'crypto';
 const ADMIN_COOKIE_NAME = 'mbl_admin_session';
 const TOKEN_MAX_AGE_SEC = 60 * 60 * 8; // 8 hours
 
-// Server secret for signing session tokens
+// Server secret for signing session tokens.
+// ADMIN_SESSION_SECRET is required in production. The hardcoded fallback
+// is intentionally unique to prevent accidental token acceptance across
+// deploys, but it MUST be overridden via environment variable in production.
 const SESSION_SECRET =
   process.env.ADMIN_SESSION_SECRET ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
   'mbl-secret-session-salt-987456123-antigravity';
 
 // Expected 4-digit PIN (defaults to 7714 in development, or process.env.ADMIN_PIN)
