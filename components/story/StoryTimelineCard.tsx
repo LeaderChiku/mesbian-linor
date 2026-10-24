@@ -17,28 +17,44 @@ interface StoryTimelineProps {
 
 const defaultChapters: StoryChapter[] = [
   {
+    id: 'ch-prologue',
+    number: 'Prologue',
+    title: 'A Story for You',
+    description: 'Where memories find their home. The opening dedication and botanical crest.',
+    isUnlocked: true,
+    date: 'The Beginning',
+  },
+  {
     id: 'ch-1',
     number: 'Chapter I',
-    title: 'The First Spark',
-    description: 'Where our path crossed and words turned into timeless memories.',
+    title: 'Treasured Moments',
+    description: 'Polaroid gallery — golden light and captured whispers from the days we shared.',
     isUnlocked: true,
-    date: 'Autumn Afternoon',
+    date: 'Our Memories',
   },
   {
     id: 'ch-2',
     number: 'Chapter II',
-    title: 'Letters & Polaroids',
-    description: 'The little notes folded in books, captured moments in soft amber light.',
+    title: 'The Letter',
+    description: 'Words kept close to the chest. A parchment letter with handwritten care.',
     isUnlocked: true,
-    date: 'Under the Stars',
+    date: 'Written for You',
   },
   {
     id: 'ch-3',
     number: 'Chapter III',
+    title: 'The Journey Map',
+    description: 'How every step brought us here — a map of the path we walked together.',
+    isUnlocked: true,
+    date: 'Our Story',
+  },
+  {
+    id: 'ch-4',
+    number: 'Chapter IV',
     title: 'A Promise for Tomorrow',
-    description: 'A chapter being written in real time. Unlocks in Phase 2.',
-    isUnlocked: false,
-    date: 'Coming Soon',
+    description: 'The final chapter — a closing page, a seal, and the words that matter most.',
+    isUnlocked: true,
+    date: 'Until Next Time',
   },
 ];
 

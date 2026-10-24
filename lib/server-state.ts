@@ -131,6 +131,7 @@ export function applyAdminCommand(
     | { type: 'AUDIO_CONTROL'; command: 'play' | 'pause' | 'resume' | 'stop'; audioId?: string; volume?: number; audioType?: 'music' | 'voice_note' }
     | { type: 'SET_SESSION_STATUS'; status: 'scheduled' | 'active' | 'paused' | 'ended' }
     | { type: 'SET_BLACK_SCREEN'; enabled: boolean }
+    | { type: 'SET_ENDING'; ending: 'ending-a' | 'ending-b' | 'ending-c' | null }
     | { type: 'REPORT_AUDIO_STATE'; state: 'playing' | 'paused' | 'stopped' | 'ducked' | 'ready' }
 ): { success: boolean; state: StorySessionState; error?: string } {
   const current = global.__mbl_session_state!;
@@ -196,6 +197,13 @@ export function applyAdminCommand(
       current.isBlackScreen = action.enabled;
       current.commandSeq += 1;
       current.lastCommand = action.enabled ? 'BLACK_SCREEN_ON' : 'BLACK_SCREEN_OFF';
+      break;
+    }
+
+    case 'SET_ENDING': {
+      current.selectedEnding = action.ending;
+      current.commandSeq += 1;
+      current.lastCommand = `SET_ENDING_${action.ending ?? 'NONE'}`;
       break;
     }
 

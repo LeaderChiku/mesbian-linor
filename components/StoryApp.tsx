@@ -268,6 +268,7 @@ export default function StoryApp() {
             key="phase-story"
             storyTitle={storyTitle}
             activeSectionIndex={session?.currentSectionIndex ?? 0}
+            selectedEnding={session?.selectedEnding ?? null}
             onLock={handleLockStory}
             onExit={handleLockStory}
           />
@@ -280,13 +281,13 @@ export default function StoryApp() {
           onClick={() => setShowDevTools((prev) => !prev)}
           className="fixed bottom-2 left-2 z-40 text-[10px] tracking-wider uppercase bg-black/40 hover:bg-black/80 text-stone-400 hover:text-stone-200 px-2 py-1 rounded-md border border-white/10 backdrop-blur-sm transition-all"
         >
-          {showDevTools ? '✕ Hide Tools' : '⚙ Phase 2 Tools'}
+          {showDevTools ? '✕ Hide Tools' : '⚙ Dev Tools'}
         </button>
 
         {showDevTools && (
           <div className="fixed bottom-10 left-2 z-50 bg-stone-900/95 text-cream-100 p-3.5 rounded-2xl border border-white/20 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-xs text-xs font-sans">
             <div className="flex items-center justify-between pb-1 border-b border-white/10">
-              <span className="font-semibold text-pistachio-300">Phase 2 Dev Controls</span>
+              <span className="font-semibold text-pistachio-300">Dev Controls</span>
               <span className="text-[10px] text-stone-400">Ctrl+Shift+D</span>
             </div>
 

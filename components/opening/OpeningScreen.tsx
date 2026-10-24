@@ -117,7 +117,7 @@ export default function OpeningScreen({
           </motion.div>
         )}
 
-        <style jsx>{`
+        <style>{`
           @keyframes pulseDot {
             0%, 100% { opacity: 0.25; transform: scale(0.85); }
             50%      { opacity: 1;    transform: scale(1.15); }

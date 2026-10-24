@@ -16,6 +16,8 @@ interface PolaroidCardProps {
 
 export default function PolaroidCard({
   children,
+  imageUrl,
+  imageAlt,
   caption,
   date,
   rotate = 1,
@@ -56,7 +58,17 @@ export default function PolaroidCard({
 
       {/* Photo / Visual Frame */}
       <div className="w-full aspect-[4/3] bg-stone-100 rounded-[2px] overflow-hidden flex items-center justify-center border border-black/[0.03]">
-        {children}
+        {imageUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={imageUrl}
+            alt={imageAlt || caption || 'Scrapbook photograph'}
+            className="w-full h-full object-cover"
+            loading="lazy"
+          />
+        ) : (
+          children
+        )}
       </div>
 
       {/* Handwritten Caption & Date */}

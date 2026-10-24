@@ -569,6 +569,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
               </div>
             </div>
 
+            <p className="text-[10px] text-stone-500 font-mono">
+              Your timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
+            </p>
+
             {/* Save / Clear Buttons */}
             <div className="grid grid-cols-2 gap-2">
               <button
@@ -691,6 +695,115 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
             <p className="text-[11px] text-stone-500">
               Code is verified securely server-side. Not leaked to visitor bundles.
             </p>
+          </section>
+
+          {/* Section 6: Ending Selection */}
+          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+            <div className="pb-2 border-b border-stone-800">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                Ending Selection
+              </span>
+              <h3 className="font-serif text-lg text-cream-100">Choose the Story Ending</h3>
+              <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                You must explicitly choose an ending. None is ever selected automatically.
+                Only select Ending C when she has clearly and voluntarily expressed comfort discussing a romantic conversation.
+              </p>
+            </div>
+
+            {/* Current ending display */}
+            <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex items-center justify-between">
+              <span className="text-xs text-stone-400">Currently selected:</span>
+              <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded-full ${
+                session?.selectedEnding === 'ending-a'
+                  ? 'bg-pistachio-950 text-pistachio-300 border border-pistachio-800'
+                  : session?.selectedEnding === 'ending-b'
+                  ? 'bg-stone-800 text-blush-300 border border-blush-900/60'
+                  : session?.selectedEnding === 'ending-c'
+                  ? 'bg-stone-800 text-amber-300 border border-amber-900/60'
+                  : 'bg-stone-800 text-stone-400 border border-stone-700'
+              }`}>
+                {session?.selectedEnding === 'ending-a' && '✓ Ending A — Normal Goodbye'}
+                {session?.selectedEnding === 'ending-b' && '✓ Ending B — Emotional Goodbye'}
+                {session?.selectedEnding === 'ending-c' && '✓ Ending C — Romantic Conversation'}
+                {!session?.selectedEnding && 'None — default closing shown'}
+              </span>
+            </div>
+
+            {/* Ending A */}
+            <button
+              onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-a' }, 'Set Ending A')}
+              disabled={Boolean(savingAction)}
+              className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                session?.selectedEnding === 'ending-a'
+                  ? 'bg-pistachio-950/80 border-pistachio-700 text-pistachio-200'
+                  : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
+              }`}
+            >
+              <span className="text-lg mt-0.5">🌿</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-wider">Ending A — Normal Goodbye</span>
+                <span className="text-[11px] text-stone-400 leading-relaxed">
+                  Gentle conclusion. Warm appreciation, wishes her happiness. No expectations.
+                </span>
+              </div>
+            </button>
+
+            {/* Ending B */}
+            <button
+              onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-b' }, 'Set Ending B')}
+              disabled={Boolean(savingAction)}
+              className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                session?.selectedEnding === 'ending-b'
+                  ? 'bg-blush-950/60 border-blush-800/80 text-blush-200'
+                  : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
+              }`}
+            >
+              <span className="text-lg mt-0.5">🥀</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-semibold uppercase tracking-wider">Ending B — Emotional Goodbye</span>
+                <span className="text-[11px] text-stone-400 leading-relaxed">
+                  Honest about feelings. Notes need for distance. She has done nothing wrong.
+                </span>
+              </div>
+            </button>
+
+            {/* Ending C — with mandatory consent warning */}
+            <div className="flex flex-col gap-2">
+              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-950/40 border border-amber-900/60">
+                <span className="text-amber-400 text-xs mt-0.5">⚠</span>
+                <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                  <strong>Consent required.</strong> Only select this ending if she has explicitly and voluntarily said she is comfortable discussing romantic feelings. Do not infer from reactions.
+                </p>
+              </div>
+              <button
+                onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-c' }, 'Set Ending C')}
+                disabled={Boolean(savingAction)}
+                className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                  session?.selectedEnding === 'ending-c'
+                    ? 'bg-amber-950/40 border-amber-700/80 text-amber-200'
+                    : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
+                }`}
+              >
+                <span className="text-lg mt-0.5">💌</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Ending C — Romantic Conversation</span>
+                  <span className="text-[11px] text-stone-400 leading-relaxed">
+                    Honest, respectful expression of feelings. Open invitation to talk. No pressure.
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* Clear ending */}
+            {session?.selectedEnding && (
+              <button
+                onClick={() => executeCommand({ type: 'SET_ENDING', ending: null }, 'Clear Ending')}
+                disabled={Boolean(savingAction)}
+                className="w-full py-2 rounded-lg bg-stone-800/40 hover:bg-stone-800 border border-stone-700/50 text-stone-400 text-xs font-semibold uppercase tracking-wider transition-colors"
+              >
+                Clear — Show Default Closing
+              </button>
+            )}
           </section>
         </div>
       </main>

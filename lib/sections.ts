@@ -116,7 +116,7 @@ export const STORY_SECTIONS: StorySection[] = [
     chapterNumber: 'Chapter IV',
     title: 'A Promise for Tomorrow',
     subtitle: 'Until the next page is written',
-    summary: 'Keepsake seal, final blessing, and session lock controls.',
+    summary: 'Keepsake seal, selected ending path (A/B/C), final blessing, and session lock controls.',
     defaultAudioId: 'music-reverie',
     associatedAudios: [STORY_AUDIOS[1], STORY_AUDIOS[5]],
   },

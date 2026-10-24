@@ -8,11 +8,15 @@ import StoryLetterCard from '@/components/story/StoryLetterCard';
 import StoryTimelineCard from '@/components/story/StoryTimelineCard';
 import AmbientAudioToggle from '@/components/ui/AmbientAudioToggle';
 import WaxSeal from '@/components/ui/WaxSeal';
+import EndingA from '@/components/story/endings/EndingA';
+import EndingB from '@/components/story/endings/EndingB';
+import EndingC from '@/components/story/endings/EndingC';
 import { clearSession } from '@/lib/session';
 
 interface WelcomeSectionProps {
   storyTitle: string;
   activeSectionIndex?: number;
+  selectedEnding?: string | null;
   onLock?: () => void;
   onExit?: () => void;
 }
@@ -35,6 +39,7 @@ const itemVariants = {
 export default function WelcomeSection({
   storyTitle,
   activeSectionIndex,
+  selectedEnding,
   onLock,
   onExit,
 }: WelcomeSectionProps) {
@@ -134,7 +139,8 @@ export default function WelcomeSection({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-7 sm:gap-8 w-full max-w-lg mx-auto">
-            {/* Polaroid 1 */}
+            {/* Polaroid 1: The Beginning */}
+            {/* PLACEHOLDER: Pass imageUrl="/photos/day-one.jpg" when real photo is ready */}
             <PolaroidCard
               rotate={-2.5}
               tape="pistachio"
@@ -143,22 +149,57 @@ export default function WelcomeSection({
               date="Day One"
             >
               <div className="w-full h-full bg-gradient-to-br from-pistachio-100 to-cream-300 flex flex-col items-center justify-center p-6 text-center">
-                <span className="text-5xl mb-2" aria-hidden>🌅</span>
-                <span className="font-script text-stone-600 text-sm">Where light meets wonder</span>
+                <span className="text-4xl mb-2" aria-hidden>🌅</span>
+                <span className="font-script text-stone-600 text-sm">Where our story quietly began</span>
+                <span className="font-sans text-[10px] text-stone-400 mt-1 uppercase tracking-wider">[Photo Placeholder]</span>
               </div>
             </PolaroidCard>
 
-            {/* Polaroid 2 */}
+            {/* Polaroid 2: Shared Valorant Memories */}
+            {/* PLACEHOLDER: Pass imageUrl="/photos/valorant.jpg" or custom screenshot */}
             <PolaroidCard
               rotate={2}
               tape="blush"
               tapePosition="top-right"
+              caption="Late Night Queues"
+              date="Valorant Memories"
+            >
+              <div className="w-full h-full bg-gradient-to-br from-blush-100 to-cream-300 flex flex-col items-center justify-center p-6 text-center">
+                <span className="text-4xl mb-2" aria-hidden>🎮</span>
+                <span className="font-script text-stone-600 text-sm">Overtime clutch &amp; laughing until 2 AM</span>
+                <span className="font-sans text-[10px] text-stone-400 mt-1 uppercase tracking-wider">[Gaming Memory]</span>
+              </div>
+            </PolaroidCard>
+
+            {/* Polaroid 3: Minecraft Memories & Inside Jokes */}
+            {/* PLACEHOLDER: Pass imageUrl="/photos/minecraft.jpg" or custom screenshot */}
+            <PolaroidCard
+              rotate={1.5}
+              tape="pistachio"
+              tapePosition="top-right"
+              caption="Our Little World"
+              date="Minecraft &amp; Inside Jokes"
+            >
+              <div className="w-full h-full bg-gradient-to-br from-pistachio-100 to-cream-200 flex flex-col items-center justify-center p-6 text-center">
+                <span className="text-4xl mb-2" aria-hidden>🌱</span>
+                <span className="font-script text-stone-600 text-sm">Little houses, lost torches &amp; shared moments</span>
+                <span className="font-sans text-[10px] text-stone-400 mt-1 uppercase tracking-wider">[World Memory]</span>
+              </div>
+            </PolaroidCard>
+
+            {/* Polaroid 4: Folded Whispers & Gratitude */}
+            {/* PLACEHOLDER: Pass imageUrl="/photos/gratitude.jpg" */}
+            <PolaroidCard
+              rotate={-1.8}
+              tape="blush"
+              tapePosition="top-left"
               caption="Folded Whispers"
               date="Kept Forever"
             >
-              <div className="w-full h-full bg-gradient-to-br from-blush-100 to-cream-300 flex flex-col items-center justify-center p-6 text-center">
-                <span className="text-5xl mb-2" aria-hidden>💌</span>
-                <span className="font-script text-stone-600 text-sm">Every letter carries your name</span>
+              <div className="w-full h-full bg-gradient-to-br from-cream-300 to-blush-100 flex flex-col items-center justify-center p-6 text-center">
+                <span className="text-4xl mb-2" aria-hidden>💌</span>
+                <span className="font-script text-stone-600 text-sm">Grateful for every conversation</span>
+                <span className="font-sans text-[10px] text-stone-400 mt-1 uppercase tracking-wider">[Gratitude Card]</span>
               </div>
             </PolaroidCard>
           </div>
@@ -185,7 +226,7 @@ export default function WelcomeSection({
           <StoryTimelineCard />
         </motion.section>
 
-        {/* ── 5. Story Footer & Re-lock Action ── */}
+        {/* ── 5. Story Closing / Selected Ending ── */}
         <motion.footer
           id="section-closing"
           variants={itemVariants}
@@ -193,15 +234,35 @@ export default function WelcomeSection({
         >
           <FloralDivider className="w-full max-w-sm opacity-60" />
 
-          <WaxSeal initials="M&L" size={56} color="pistachio" />
+          {/* Ending panel — rendered only when admin has selected an ending */}
+          {selectedEnding === 'ending-a' && (
+            <div className="w-full text-left">
+              <EndingA />
+            </div>
+          )}
+          {selectedEnding === 'ending-b' && (
+            <div className="w-full text-left">
+              <EndingB />
+            </div>
+          )}
+          {selectedEnding === 'ending-c' && (
+            <div className="w-full text-left">
+              <EndingC />
+            </div>
+          )}
 
-          <p className="font-script text-2xl text-pistachio-800">
-            made with all our love ♡
-          </p>
-
-          <p className="font-serif text-xs text-stone-500 max-w-xs leading-relaxed">
-            Your progress is securely saved. You can return anytime on your phone or laptop.
-          </p>
+          {/* Default closing — shown when no ending is selected yet */}
+          {!selectedEnding && (
+            <>
+              <WaxSeal initials="M&L" size={56} color="pistachio" />
+              <p className="font-script text-2xl text-pistachio-800">
+                made with all our love ♡
+              </p>
+              <p className="font-serif text-xs text-stone-500 max-w-xs leading-relaxed">
+                Your progress is securely saved. You can return anytime on your phone or laptop.
+              </p>
+            </>
+          )}
 
           {/* Visitor action buttons */}
           <div className="flex items-center gap-4 mt-2">
