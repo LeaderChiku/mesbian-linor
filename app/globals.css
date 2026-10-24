@@ -1,0 +1,89 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── CSS Custom Properties ─────────────────────────────── */
+:root {
+  --color-pistachio: #8faf6b;
+  --color-cream:     #f5f0e8;
+  --color-blush:     #e8b4b8;
+  --color-stone:     #a09080;
+}
+
+/* ─── Base resets & background ─────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+  background-color: #000000;
+}
+
+/* Start with black background to prevent any flash before opening screen */
+body {
+  @apply bg-black text-stone-100 antialiased;
+  font-family: var(--font-inter), system-ui, -apple-system, sans-serif;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ─── Typography helpers ─────────────────────────────────── */
+.font-script  { font-family: var(--font-dancing), 'Brush Script MT', cursive; }
+.font-display { font-family: var(--font-playfair), Georgia, serif; }
+
+/* ─── Scrapbook & Paper Shadows ─────────────────────────── */
+.shadow-polaroid {
+  box-shadow:
+    0 10px 25px -5px rgba(0, 0, 0, 0.08),
+    0 8px 10px -6px rgba(0, 0, 0, 0.04),
+    0 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.shadow-letter {
+  box-shadow:
+    0 1px 3px 0 rgba(0, 0, 0, 0.04),
+    0 20px 25px -5px rgba(143, 175, 107, 0.05),
+    0 8px 10px -6px rgba(0, 0, 0, 0.02);
+}
+
+/* ─── Washi Tape Styling ─────────────────────────────────── */
+.washi-tape {
+  position: absolute;
+  height: 18px;
+  width: 70px;
+  background-color: rgba(207, 224, 170, 0.65);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  backdrop-filter: blur(1px);
+  z-index: 10;
+  clip-path: polygon(
+    0% 0%, 5% 15%, 0% 30%, 5% 45%, 0% 60%, 5% 75%, 0% 90%, 5% 100%,
+    100% 100%, 95% 85%, 100% 70%, 95% 55%, 100% 40%, 95% 25%, 100% 10%, 95% 0%
+  );
+}
+
+.washi-tape-blush {
+  background-color: rgba(232, 180, 184, 0.65);
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #cfe0aa;
+  border-radius: 9999px;
+}
+
+/* ─── Reduced-motion accessibility ───────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
