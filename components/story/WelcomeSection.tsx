@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import FloralDivider from '@/components/ui/FloralDivider';
 import PolaroidCard from '@/components/ui/PolaroidCard';
@@ -11,7 +12,9 @@ import { clearSession } from '@/lib/session';
 
 interface WelcomeSectionProps {
   storyTitle: string;
+  activeSectionIndex?: number;
   onLock?: () => void;
+  onExit?: () => void;
 }
 
 const containerVariants = {
@@ -31,8 +34,30 @@ const itemVariants = {
 
 export default function WelcomeSection({
   storyTitle,
+  activeSectionIndex,
   onLock,
+  onExit,
 }: WelcomeSectionProps) {
+  // Smoothly scroll visitor phone to the section navigated by Admin
+  useEffect(() => {
+    if (typeof activeSectionIndex === 'number') {
+      const sectionIds = [
+        'section-hero',
+        'section-polaroids',
+        'section-letter',
+        'section-timeline',
+        'section-closing',
+      ];
+      const targetId = sectionIds[activeSectionIndex];
+      if (targetId) {
+        const el = document.getElementById(targetId);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }
+    }
+  }, [activeSectionIndex]);
+
   function handleLockStory() {
     clearSession();
     if (onLock) {
@@ -72,8 +97,9 @@ export default function WelcomeSection({
       >
         {/* ── 1. Story Hero Header ── */}
         <motion.header
+          id="section-hero"
           variants={itemVariants}
-          className="flex flex-col items-center gap-4 text-center pt-2 sm:pt-4"
+          className="flex flex-col items-center gap-4 text-center pt-2 sm:pt-4 scroll-mt-8"
         >
           {/* Botanical Crest */}
           <div className="flex items-center gap-3" aria-hidden>
@@ -97,8 +123,9 @@ export default function WelcomeSection({
 
         {/* ── 2. Polaroid Scrapbook Gallery ── */}
         <motion.section
+          id="section-polaroids"
           variants={itemVariants}
-          className="flex flex-col items-center gap-6"
+          className="flex flex-col items-center gap-6 scroll-mt-10"
         >
           <div className="text-center">
             <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-stone-400 font-medium">
@@ -138,7 +165,7 @@ export default function WelcomeSection({
         </motion.section>
 
         {/* ── 3. Narrative Letter Section ── */}
-        <motion.section variants={itemVariants}>
+        <motion.section id="section-letter" variants={itemVariants} className="scroll-mt-10">
           <StoryLetterCard
             title="The Chapter We Write Together"
             date="A Story Dedicated to You"
@@ -154,14 +181,15 @@ export default function WelcomeSection({
         </motion.section>
 
         {/* ── 4. Interactive Chapters Roadmap ── */}
-        <motion.section variants={itemVariants} className="pt-2">
+        <motion.section id="section-timeline" variants={itemVariants} className="pt-2 scroll-mt-10">
           <StoryTimelineCard />
         </motion.section>
 
         {/* ── 5. Story Footer & Re-lock Action ── */}
         <motion.footer
+          id="section-closing"
           variants={itemVariants}
-          className="flex flex-col items-center gap-5 pt-8 pb-12 text-center"
+          className="flex flex-col items-center gap-5 pt-8 pb-12 text-center scroll-mt-10"
         >
           <FloralDivider className="w-full max-w-sm opacity-60" />
 
@@ -175,13 +203,23 @@ export default function WelcomeSection({
             Your progress is securely saved. You can return anytime on your phone or laptop.
           </p>
 
-          {/* Discreet Re-lock / Replay button for testing */}
-          <button
-            onClick={handleLockStory}
-            className="mt-2 text-[11px] font-sans tracking-widest uppercase text-stone-400 hover:text-stone-700 underline underline-offset-4 transition-colors"
-          >
-            🔒 Lock Story & Test Passcode Again
-          </button>
+          {/* Visitor action buttons */}
+          <div className="flex items-center gap-4 mt-2">
+            <button
+              onClick={handleLockStory}
+              className="text-[11px] font-sans tracking-widest uppercase text-stone-400 hover:text-stone-700 underline underline-offset-4 transition-colors"
+            >
+              🔒 Lock Story
+            </button>
+            {onExit && (
+              <button
+                onClick={onExit}
+                className="text-[11px] font-sans tracking-widest uppercase text-stone-400 hover:text-stone-700 underline underline-offset-4 transition-colors"
+              >
+                🚪 Leave Story
+              </button>
+            )}
+          </div>
         </motion.footer>
       </motion.div>
     </motion.div>

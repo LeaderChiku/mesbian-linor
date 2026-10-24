@@ -6,10 +6,10 @@ import FloralDivider from '@/components/ui/FloralDivider';
 import { markVerified } from '@/lib/session';
 
 interface AccessCodeScreenProps {
-  /** Configurable 3-digit code string, e.g. "472" */
-  correctCode: string;
-  storyTitle:  string;
-  onSuccess:   () => void;
+  /** Optional fallback code string */
+  correctCode?: string;
+  storyTitle:   string;
+  onSuccess:    () => void;
 }
 
 export default function AccessCodeScreen({
@@ -32,26 +32,59 @@ export default function AccessCodeScreen({
   const enteredCode = digits.join('');
   const isComplete  = digits.every((d) => d.length === 1 && /\d/.test(d));
 
-  const executeVerification = useCallback(() => {
-    if (!isComplete) return;
+  const [isVerifying, setIsVerifying] = useState(false);
 
-    const targetCode = String(correctCode || '472').trim();
+  const executeVerification = useCallback(async () => {
+    if (!isComplete || isVerifying) return;
+    setIsVerifying(true);
 
-    if (enteredCode === targetCode) {
-      setSuccess(true);
-      setError(null);
-      markVerified();
-      setTimeout(onSuccess, 850);
-    } else {
-      setError("That code isn't quite right. Take a look and try again.");
+    try {
+      // 1. Authoritative server-side verification with rate limiting
+      const res = await fetch('/api/visitor/verify-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: enteredCode }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok && data.success) {
+        setSuccess(true);
+        setError(null);
+        markVerified();
+        setTimeout(onSuccess, 850);
+        return;
+      }
+
+      // If server rejected code
+      const errorMsg = data.error || "That code isn't quite right. Take a look and try again.";
+      setError(errorMsg);
       setShaking(true);
       setTimeout(() => {
         setDigits(['', '', '']);
         setShaking(false);
         inputRefs.current[0]?.focus();
       }, 550);
+    } catch {
+      // Offline fallback: check against fallback code if provided
+      if (correctCode && enteredCode === correctCode.trim()) {
+        setSuccess(true);
+        setError(null);
+        markVerified();
+        setTimeout(onSuccess, 850);
+        return;
+      }
+      setError("Unable to verify code. Please check your connection.");
+      setShaking(true);
+      setTimeout(() => {
+        setDigits(['', '', '']);
+        setShaking(false);
+        inputRefs.current[0]?.focus();
+      }, 550);
+    } finally {
+      setIsVerifying(false);
     }
-  }, [isComplete, correctCode, enteredCode, onSuccess]);
+  }, [isComplete, isVerifying, enteredCode, correctCode, onSuccess]);
 
   // ── Auto-verify when all 3 digits are filled ────────────────
   useEffect(() => {
