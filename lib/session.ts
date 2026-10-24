@@ -1,43 +1,55 @@
 /**
- * Visitor session helpers (browser-only, localStorage).
+ * Visitor session helpers (Phase 4 — strict per-visit security).
  *
- * Stores:
- *  - Whether the visitor has been verified (code entered correctly).
- *  - Persistent visitor token for future Supabase real-time sync (Phase 2).
- *  - The story phase they left on, preserving flow across refreshes.
+ * Requirements:
+ * - A fresh visit must start at the PIN gate (or countdown if future).
+ * - Reloading returns the visitor to the PIN gate (no automatic localStorage bypass).
+ * - Story access is granted only after server verification of 3-digit code.
  */
 
-const KEY_VERIFIED     = 'mbl_verified';
 const KEY_PHASE        = 'mbl_phase';
 const KEY_VISITOR_UUID = 'mbl_visitor_id';
 
 export type StoryPhase = 'loading' | 'countdown' | 'access' | 'story';
 
+// In-memory active verification for the current page session
+let inMemoryVerified = false;
+
 export function isVerified(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(KEY_VERIFIED) === 'true';
+  return inMemoryVerified;
 }
 
 export function markVerified(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(KEY_VERIFIED, 'true');
+  inMemoryVerified = true;
 }
 
 export function clearSession(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(KEY_VERIFIED);
-  localStorage.removeItem(KEY_PHASE);
+  inMemoryVerified = false;
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(KEY_PHASE);
+    sessionStorage.removeItem('mbl_session_verified');
+    // Clear cookie
+    document.cookie = 'mbl_visitor_verified=; path=/; max-age=0';
+  }
 }
 
 export function savePhase(phase: StoryPhase): void {
   if (typeof window === 'undefined') return;
-  localStorage.setItem(KEY_PHASE, phase);
+  try {
+    sessionStorage.setItem(KEY_PHASE, phase);
+  } catch {
+    // ignore storage errors
+  }
 }
 
 export function loadPhase(): StoryPhase | null {
   if (typeof window === 'undefined') return null;
-  const v = localStorage.getItem(KEY_PHASE);
-  if (v === 'countdown' || v === 'access' || v === 'story') return v;
+  try {
+    const v = sessionStorage.getItem(KEY_PHASE);
+    if (v === 'countdown' || v === 'access') return v;
+  } catch {
+    // ignore
+  }
   return null;
 }
 

@@ -20,7 +20,15 @@ import WaxSeal from '@/components/ui/WaxSeal';
  * feelings, clear acknowledgment that she may feel differently, and a
  * respectful invitation to talk — with no pressure for an answer.
  */
-export default function EndingC() {
+interface EndingCProps {
+  title?: string;
+  wish?: string;
+}
+
+export default function EndingC({
+  title = "Something I'd Like to Say",
+  wish = "I wish that whatever you choose leads you exactly where you're meant to be.",
+}: EndingCProps) {
   return (
     <motion.article
       initial={{ opacity: 0, y: 24 }}
@@ -45,7 +53,7 @@ export default function EndingC() {
           An Honest Conversation
         </span>
         <h2 className="font-display text-2xl sm:text-3xl text-stone-800 tracking-tight">
-          Something I&apos;d Like to Say
+          {title}
         </h2>
       </header>
 
@@ -108,8 +116,7 @@ export default function EndingC() {
       <div className="bg-cream-200 rounded-2xl p-4 border border-stone-200/40 text-center mt-4">
         <p className="font-sans text-[11px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">11:11 Wish</p>
         <p className="font-script text-xl text-stone-700 leading-relaxed">
-          {/* PLACEHOLDER — personalise the 11:11 wish */}
-          I wish that whatever you choose leads you exactly where you&apos;re meant to be.
+          {wish}
         </p>
       </div>
 

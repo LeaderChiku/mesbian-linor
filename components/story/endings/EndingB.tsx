@@ -12,7 +12,15 @@ import WaxSeal from '@/components/ui/WaxSeal';
  * Makes it clear she has done nothing wrong.
  * Ends with a sincere wish for her happiness, with no guilt or pressure.
  */
-export default function EndingB() {
+interface EndingBProps {
+  title?: string;
+  wish?: string;
+}
+
+export default function EndingB({
+  title = 'Some Things Are Hard to Keep Inside',
+  wish = 'I wish you find the kind of peace that feels like coming home.',
+}: EndingBProps) {
   return (
     <motion.article
       initial={{ opacity: 0, y: 24 }}
@@ -37,7 +45,7 @@ export default function EndingB() {
           From the Heart
         </span>
         <h2 className="font-display text-2xl sm:text-3xl text-stone-800 tracking-tight">
-          Some Things Are Hard to Keep Inside
+          {title}
         </h2>
       </header>
 
@@ -96,8 +104,7 @@ export default function EndingB() {
       <div className="bg-cream-200 rounded-2xl p-4 border border-stone-200/40 text-center mt-4">
         <p className="font-sans text-[11px] tracking-[0.2em] uppercase text-stone-400 mb-1.5">11:11 Wish</p>
         <p className="font-script text-xl text-stone-700 leading-relaxed">
-          {/* PLACEHOLDER — personalise the 11:11 wish */}
-          I wish you find the kind of peace that feels like coming home.
+          {wish}
         </p>
       </div>
 

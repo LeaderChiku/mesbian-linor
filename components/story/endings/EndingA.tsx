@@ -11,7 +11,15 @@ import WaxSeal from '@/components/ui/WaxSeal';
  * and shared memories, wishes her happiness, and respects her freedom.
  * No expectations, no guilt, no pressure.
  */
-export default function EndingA() {
+interface EndingAProps {
+  title?: string;
+  wish?: string;
+}
+
+export default function EndingA({
+  title = 'Thank You for Everything',
+  wish = 'I wish you a life full of moments that make you smile without knowing why.',
+}: EndingAProps) {
   return (
     <motion.article
       initial={{ opacity: 0, y: 24 }}
@@ -36,7 +44,7 @@ export default function EndingA() {
           A Quiet Goodbye
         </span>
         <h2 className="font-display text-2xl sm:text-3xl text-stone-800 tracking-tight">
-          Thank You for Everything
+          {title}
         </h2>
       </header>
 
@@ -75,8 +83,7 @@ export default function EndingA() {
       <div className="bg-pistachio-50 rounded-2xl p-4 border border-pistachio-200/60 text-center">
         <p className="font-sans text-[11px] tracking-[0.2em] uppercase text-pistachio-600 mb-1.5">11:11 Wish</p>
         <p className="font-script text-xl text-pistachio-800 leading-relaxed">
-          {/* PLACEHOLDER — personalise the 11:11 wish */}
-          I wish you a life full of moments that make you smile without knowing why.
+          {wish}
         </p>
       </div>
 

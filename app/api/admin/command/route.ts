@@ -4,6 +4,7 @@ import {
   getSessionState,
   getStoredVisitorCode,
   applyAdminCommand,
+  syncSessionWithSupabase,
 } from '@/lib/server-state';
 
 function isAuthorized(req: NextRequest): boolean {
@@ -48,6 +49,10 @@ export async function POST(req: NextRequest) {
 
     if (!result.success) {
       return NextResponse.json({ error: result.error || 'Failed to apply command' }, { status: 400 });
+    }
+
+    if (action.type === 'SET_SCHEDULE') {
+      await syncSessionWithSupabase(result.state);
     }
 
     return NextResponse.json({

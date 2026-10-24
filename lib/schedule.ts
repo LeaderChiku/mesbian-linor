@@ -30,7 +30,7 @@ export function getTimeRemaining(scheduledAt: string | number): TimeRemaining {
   const diff = target - now;
 
   if (diff <= 0) {
-    return { days: 0, hours: 0, minutes: 0, seconds: 0, total: diff };
+    return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 };
   }
 
   const totalSec = Math.floor(diff / 1000);

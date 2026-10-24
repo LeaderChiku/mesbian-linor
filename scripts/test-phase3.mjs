@@ -109,7 +109,7 @@ async function runTests() {
   });
 
   test('getTimeRemaining handles future timestamps without drift', () => {
-    const future = new Date(Date.now() + 1000 * 60 * 65).toISOString(); // 1 hr 5 min
+    const future = new Date(Date.now() + 1000 * 60 * 65 + 1500).toISOString(); // 1 hr 5 min (with subsecond buffer)
     const rem = getTimeRemaining(future);
     assert.strictEqual(rem.hours, 1);
     assert.strictEqual(rem.minutes, 5);

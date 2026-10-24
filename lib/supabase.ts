@@ -12,6 +12,22 @@ export const supabase =
     ? createClient(supabaseUrl, supabaseAnon)
     : null;
 
+/**
+ * Server-side Supabase client (privileged with service_role if available).
+ * Never accessible in browser client bundles.
+ */
+export function getSupabaseServerClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const key =
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    '';
+  if (!url || !key) return null;
+  return createClient(url, key, {
+    auth: { persistSession: false },
+  });
+}
+
 export type StoryConfig = {
   id:            string;
   scheduled_at:  string | null; // ISO-8601 UTC

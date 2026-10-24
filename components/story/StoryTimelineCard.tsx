@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 
 export interface StoryChapter {
@@ -61,15 +62,86 @@ const defaultChapters: StoryChapter[] = [
 export default function StoryTimelineCard({
   chapters = defaultChapters,
 }: StoryTimelineProps) {
+  const [readyStatus, setReadyStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleReadyToBegin = async () => {
+    if (readyStatus === 'sending' || readyStatus === 'sent') return;
+    setReadyStatus('sending');
+    setErrorMessage(null);
+
+    try {
+      const res = await fetch('/api/session/ready-to-begin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'Your girl is ready to see the story! 💌' }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setReadyStatus('sent');
+      } else {
+        setErrorMessage(data.error || 'Failed to send notification');
+        setReadyStatus('error');
+      }
+    } catch {
+      setErrorMessage('Network error sending notification');
+      setReadyStatus('error');
+    }
+  };
+
   return (
     <section className="w-full max-w-xl mx-auto flex flex-col gap-6">
-      <div className="flex flex-col items-center text-center gap-1">
+      <div className="flex flex-col items-center text-center gap-1.5">
         <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-pistachio-600 font-semibold">
           Story Map
         </span>
-        <h3 className="font-display text-2xl text-stone-800">
+        <h3 className="font-display text-2xl sm:text-3xl text-stone-800">
           The Chapters of Our Journey
         </h3>
+
+        {/* Ready to Begin Action Button */}
+        <motion.button
+          onClick={handleReadyToBegin}
+          disabled={readyStatus === 'sending' || readyStatus === 'sent'}
+          whileHover={readyStatus === 'idle' ? { scale: 1.03 } : {}}
+          whileTap={readyStatus === 'idle' ? { scale: 0.97 } : {}}
+          className={`
+            mt-2.5 px-6 py-2.5 rounded-full text-xs font-sans tracking-widest uppercase font-semibold
+            transition-all duration-300 flex items-center justify-center gap-2 border shadow-sm
+            ${
+              readyStatus === 'sent'
+                ? 'bg-pistachio-100 text-pistachio-800 border-pistachio-300 shadow-inner'
+                : readyStatus === 'sending'
+                ? 'bg-stone-100 text-stone-500 border-stone-200 cursor-wait'
+                : 'bg-white hover:bg-pistachio-50 text-pistachio-700 hover:text-pistachio-900 border-pistachio-300/80 cursor-pointer shadow-sm hover:shadow'
+            }
+          `}
+        >
+          {readyStatus === 'sending' && (
+            <>
+              <span className="w-2 h-2 rounded-full bg-pistachio-600 animate-ping mr-1" />
+              <span>Notifying him...</span>
+            </>
+          )}
+          {readyStatus === 'sent' && (
+            <>
+              <span>✓</span>
+              <span>He knows you&apos;re ready 💌</span>
+            </>
+          )}
+          {(readyStatus === 'idle' || readyStatus === 'error') && (
+            <>
+              <span aria-hidden>💌</span>
+              <span>Ready to Begin</span>
+            </>
+          )}
+        </motion.button>
+
+        {errorMessage && (
+          <p className="text-[11px] font-sans text-stone-500 mt-1 italic">
+            {errorMessage}
+          </p>
+        )}
       </div>
 
       <div className="relative pl-6 sm:pl-8 border-l-2 border-pistachio-200/80 flex flex-col gap-8 ml-3 sm:ml-4">

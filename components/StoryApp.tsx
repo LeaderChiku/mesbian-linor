@@ -11,6 +11,8 @@ import OpeningScreen    from '@/components/opening/OpeningScreen';
 import CountdownScreen  from '@/components/countdown/CountdownScreen';
 import AccessCodeScreen from '@/components/access/AccessCodeScreen';
 import WelcomeSection   from '@/components/story/WelcomeSection';
+import GlassShatterTransition from '@/components/twist/GlassShatterTransition';
+import RomanticExperience from '@/components/twist/RomanticExperience';
 
 /**
  * Master Visitor Experience & Real-Time Orchestrator
@@ -40,14 +42,81 @@ export default function StoryApp() {
   const { needsGesture, unlockAudioOnGesture } = useVisitorAudio(session);
 
   // ── Live countdown calculation based on authoritative scheduledAt ──
-  const remaining: TimeRemaining = useMemo(() => {
+  const [remaining, setRemaining] = useState<TimeRemaining>(() => {
+    return session?.scheduledAt
+      ? getTimeRemaining(session.scheduledAt)
+      : { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 };
+  });
+
+  useEffect(() => {
     if (!session?.scheduledAt) {
-      return { days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 };
+      setRemaining({ days: 0, hours: 0, minutes: 0, seconds: 0, total: 0 });
+      return;
     }
-    return getTimeRemaining(session.scheduledAt);
+
+    const updateRemaining = () => {
+      setRemaining(getTimeRemaining(session.scheduledAt!));
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        updateRemaining();
+      }
+    };
+    const handleFocus = () => {
+      updateRemaining();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
   }, [session?.scheduledAt]);
 
   const isSchedulePast = !session?.scheduledAt || remaining.total <= 0;
+
+  // ── P4.8 Romantic Twist Live State & Glass Shatter Animation ──
+  const [isShattering, setIsShattering] = useState(false);
+  const [prevTwistActive, setPrevTwistActive] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (session?.isTwistActive === undefined) return;
+    if (prevTwistActive === null) {
+      setPrevTwistActive(session.isTwistActive);
+      return;
+    }
+    // Detect trigger transition from false -> true
+    if (!prevTwistActive && session.isTwistActive) {
+      setIsShattering(true);
+    }
+    setPrevTwistActive(session.isTwistActive);
+  }, [session?.isTwistActive, prevTwistActive]);
+
+  // ── P4.5 Black Screen Scroll-Lock & Touch-Lock ──
+  useEffect(() => {
+    if (session?.isBlackScreen) {
+      const prevBodyOverflow = document.body.style.overflow;
+      const prevHtmlOverflow = document.documentElement.style.overflow;
+      const prevTouchAction = document.body.style.touchAction;
+
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.touchAction = 'none';
+
+      return () => {
+        document.body.style.overflow = prevBodyOverflow;
+        document.documentElement.style.overflow = prevHtmlOverflow;
+        document.body.style.touchAction = prevTouchAction;
+      };
+    }
+  }, [session?.isBlackScreen]);
 
   // ── Keyboard shortcut to toggle dev preview toolbar (Ctrl + Shift + D) ──
   useEffect(() => {
@@ -177,11 +246,23 @@ export default function StoryApp() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 1.2, ease: 'easeInOut' }}
-            className="fixed inset-0 z-50 bg-black flex items-center justify-center pointer-events-auto"
+            transition={{ duration: 0.8, ease: 'easeInOut' }}
+            className="fixed inset-0 z-[99999] bg-black flex items-center justify-center pointer-events-auto select-none touch-none w-screen h-screen"
+            aria-modal="true"
+            role="dialog"
           >
-            <div className="w-1.5 h-1.5 rounded-full bg-stone-800 animate-pulse" />
+            <div className="w-1.5 h-1.5 rounded-full bg-stone-900 animate-pulse" />
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* ── P4.8 Glass Shatter Transition ── */}
+      <AnimatePresence>
+        {isShattering && (
+          <GlassShatterTransition
+            key="glass-shatter-screen"
+            onComplete={() => setIsShattering(false)}
+          />
         )}
       </AnimatePresence>
 
@@ -236,44 +317,56 @@ export default function StoryApp() {
         )}
       </AnimatePresence>
 
-      {/* ── Main Sequential Screens ── */}
-      <AnimatePresence mode="wait">
-        {/* Phase 1: Opening Screen */}
-        {phase === 'loading' && (
-          <OpeningScreen key="phase-opening" onComplete={handleOpeningComplete} />
-        )}
+      {/* ── Main Sequential Screens (Inert when black screen is active) ── */}
+      <div
+        aria-hidden={Boolean(session?.isBlackScreen)}
+        className={session?.isBlackScreen ? 'pointer-events-none select-none filter blur-sm' : ''}
+      >
+        <AnimatePresence mode="wait">
+          {/* Phase 1: Opening Screen */}
+          {phase === 'loading' && (
+            <OpeningScreen key="phase-opening" onComplete={handleOpeningComplete} />
+          )}
 
-        {/* Phase 2: Scheduled Countdown Screen */}
-        {phase === 'countdown' && !isSchedulePast && (
-          <CountdownScreen
-            key="phase-countdown"
-            remaining={remaining}
-            storyTitle={storyTitle}
-            scheduledAt={scheduledAt}
-          />
-        )}
+          {/* Phase 2: Scheduled Countdown Screen */}
+          {phase === 'countdown' && !isSchedulePast && (
+            <CountdownScreen
+              key="phase-countdown"
+              remaining={remaining}
+              storyTitle={storyTitle}
+              scheduledAt={scheduledAt}
+            />
+          )}
 
-        {/* Phase 3: Access Code Verification Screen */}
-        {phase === 'access' && (
-          <AccessCodeScreen
-            key="phase-access"
-            storyTitle={storyTitle}
-            onSuccess={handleAccessSuccess}
-          />
-        )}
+          {/* Phase 3: Access Code Verification Screen */}
+          {phase === 'access' && (
+            <AccessCodeScreen
+              key="phase-access"
+              storyTitle={storyTitle}
+              onSuccess={handleAccessSuccess}
+            />
+          )}
 
-        {/* Phase 4: Welcome Section & Scrapbook Story */}
-        {phase === 'story' && (
-          <WelcomeSection
-            key="phase-story"
-            storyTitle={storyTitle}
-            activeSectionIndex={session?.currentSectionIndex ?? 0}
-            selectedEnding={session?.selectedEnding ?? null}
-            onLock={handleLockStory}
-            onExit={handleLockStory}
-          />
-        )}
-      </AnimatePresence>
+          {/* Phase 4: Welcome Section & Scrapbook Story OR Romantic Twist Experience */}
+          {phase === 'story' && session?.isTwistActive && !isShattering ? (
+            <RomanticExperience
+              key="phase-twist"
+              cmsData={session?.cmsData}
+              onLock={handleLockStory}
+            />
+          ) : phase === 'story' ? (
+            <WelcomeSection
+              key="phase-story"
+              storyTitle={storyTitle}
+              cmsData={session?.cmsData}
+              activeSectionIndex={session?.currentSectionIndex ?? 0}
+              selectedEnding={session?.selectedEnding ?? null}
+              onLock={handleLockStory}
+              onExit={handleLockStory}
+            />
+          ) : null}
+        </AnimatePresence>
+      </div>
 
       {/* ── Discreet Dev Preview Pill / Toolbar (Ctrl+Shift+D) ── */}
       <aside aria-label="Developer Preview Toolbar">

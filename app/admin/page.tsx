@@ -1,29 +1,26 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import AdminLogin from '@/components/admin/AdminLogin';
 import AdminDashboard from '@/components/admin/AdminDashboard';
 
+/**
+ * Admin Panel Entry Route (/admin)
+ *
+ * Security & Reload Policy (Phase 4):
+ * - Opening /admin displays the admin PIN entry screen.
+ * - Entering correct 4-digit PIN authenticates with the server,
+ *   sets an HMAC-signed HTTP-only session cookie, and opens the dashboard.
+ * - Reloading /admin requires entering the PIN again.
+ * - Server endpoints verify session tokens on every single privileged operation.
+ */
 export default function AdminPage() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  // Always start unauthenticated on page load or reload
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
-  const checkAuth = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin/auth', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        setIsAuthenticated(Boolean(data.authenticated));
-      } else {
-        setIsAuthenticated(false);
-      }
-    } catch {
-      setIsAuthenticated(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    checkAuth();
-  }, [checkAuth]);
+  const handleAuthenticated = () => {
+    setIsAuthenticated(true);
+  };
 
   const handleLogout = async () => {
     try {
@@ -33,17 +30,8 @@ export default function AdminPage() {
     }
   };
 
-  if (isAuthenticated === null) {
-    return (
-      <div className="min-h-screen bg-stone-950 text-stone-300 flex items-center justify-center font-sans text-xs">
-        <span className="w-2 h-2 rounded-full bg-pistachio-400 animate-ping mr-2.5" />
-        Checking administrator session...
-      </div>
-    );
-  }
-
   if (!isAuthenticated) {
-    return <AdminLogin onAuthenticated={() => setIsAuthenticated(true)} />;
+    return <AdminLogin onAuthenticated={handleAuthenticated} />;
   }
 
   return <AdminDashboard onLogout={handleLogout} />;

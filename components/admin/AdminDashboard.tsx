@@ -8,7 +8,11 @@ import {
   type StorySection,
 } from '@/lib/sections';
 import { getTimeRemaining, formatScheduledDate, pad } from '@/lib/schedule';
-import type { StorySessionState } from '@/lib/server-state';
+import type { StorySessionState, NotificationItem } from '@/lib/server-state';
+import AdminCmsPanel from '@/components/admin/AdminCmsPanel';
+import AdminPhotoManager from '@/components/admin/AdminPhotoManager';
+
+type AdminTab = 'control' | 'cms' | 'photos';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -21,8 +25,14 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   const [savingAction, setSavingAction]   = useState<string | null>(null);
   const [bannerNotice, setBannerNotice]   = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
+  // ── Active Panel Tab ────────────────────────────────────────
+  const [activeTab, setActiveTab] = useState<AdminTab>('control');
+
   // ── Admin Countdown Visibility Toggle (Default: OFF) ────────
   const [showAdminCountdown, setShowAdminCountdown] = useState(false);
+
+  // ── Twist confirmation modal ────────────────────────────────
+  const [showTwistModal, setShowTwistModal] = useState(false);
 
   // ── Scheduling state (ISO local input) ──────────────────────
   const [scheduledDate, setScheduledDate] = useState<string>('');
@@ -196,10 +206,37 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   };
 
   // ── Live Admin Countdown Calculation (when toggle ON) ───────
+  const [adminNow, setAdminNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (!showAdminCountdown || !session?.scheduledAt) return;
+    const updateTime = () => setAdminNow(Date.now());
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        updateTime();
+      }
+    };
+    const handleFocus = () => {
+      updateTime();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [showAdminCountdown, session?.scheduledAt]);
+
   const adminCountdown = useMemo(() => {
     if (!showAdminCountdown || !session?.scheduledAt) return null;
     return getTimeRemaining(session.scheduledAt);
-  }, [showAdminCountdown, session?.scheduledAt]);
+  }, [showAdminCountdown, session?.scheduledAt, adminNow]);
 
   if (loading) {
     return (
@@ -209,6 +246,8 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       </div>
     );
   }
+
+  const unreadCount = session?.notifications?.filter((n: NotificationItem) => !n.read).length ?? 0;
 
   return (
     <div className="min-h-screen bg-stone-950 text-stone-100 font-sans pb-16 select-none">
@@ -247,6 +286,47 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         </div>
       </header>
 
+      {/* ── Notification Banner (Ready to Begin or custom events) ── */}
+      <AnimatePresence>
+        {unreadCount > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className="bg-rose-950/90 border-b border-rose-700/80 text-rose-100 px-6 py-3 flex items-center justify-between gap-4"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-base shrink-0">💌</span>
+              <span className="text-xs font-medium truncate">
+                {session?.notifications?.find((n: NotificationItem) => !n.read)?.message ?? ''}
+              </span>
+              {unreadCount > 1 && (
+                <span className="shrink-0 bg-rose-700 text-rose-100 text-[10px] px-1.5 py-0.5 rounded-full font-mono">
+                  +{unreadCount - 1} more
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  const first = session?.notifications?.find((n: NotificationItem) => !n.read);
+                  if (first) executeCommand({ type: 'DISMISS_NOTIFICATION', id: first.id }, 'Dismiss notification');
+                }}
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-rose-800 hover:bg-rose-700 text-rose-100 border border-rose-700 transition-colors"
+              >
+                Dismiss
+              </button>
+              <button
+                onClick={() => executeCommand({ type: 'CLEAR_NOTIFICATIONS' }, 'Clear all notifications')}
+                className="text-[11px] px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition-colors"
+              >
+                Clear All
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* ── Alert / Feedback Banner ── */}
       <AnimatePresence>
         {bannerNotice && (
@@ -271,542 +351,686 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
         )}
       </AnimatePresence>
 
-      {/* ── Main Admin Grid Layout ── */}
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* ── Panel Tab Navigation ── */}
+      <nav className="max-w-6xl mx-auto px-4 sm:px-6 pt-5 flex items-center gap-2 border-b border-stone-800 pb-0">
+        {([
+          { id: 'control', label: '🎛️ Live Control', title: 'Session Control' },
+          { id: 'cms', label: '✏️ Edit Content', title: 'CMS Editor' },
+          { id: 'photos', label: '📷 Photo Albums', title: 'Photo Manager' },
+        ] as const).map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`px-4 py-2.5 rounded-t-xl text-xs font-semibold uppercase tracking-wider border-t border-x transition-all relative top-px ${
+              activeTab === tab.id
+                ? 'bg-stone-900 border-stone-700 text-cream-100 border-b-stone-900'
+                : 'bg-transparent border-transparent text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </nav>
 
-        {/* ── Column 1: Live Navigation & Status (7 cols) ── */}
-        <div className="lg:col-span-7 flex flex-col gap-6">
+      {/* ── Tab: Live Control ── */}
+      {activeTab === 'control' && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
-          {/* Section 1: Real-time Section Navigation */}
-          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-5">
-            <div className="flex items-center justify-between pb-3 border-b border-stone-800">
-              <div>
-                <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
-                  Section Navigation
-                </span>
-                <h2 className="font-serif text-xl text-cream-100">
-                  Section {currentSection.index + 1} of {STORY_SECTIONS.length}: {currentSection.title}
-                </h2>
-              </div>
+          {/* ── Column 1: Live Navigation & Status (7 cols) ── */}
+          <div className="lg:col-span-7 flex flex-col gap-6">
 
-              <span className="text-xs text-stone-400 font-script text-base">
-                {currentSection.chapterNumber}
-              </span>
-            </div>
+            {/* Section 1: Real-time Section Navigation */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-5">
+              <div className="flex items-center justify-between pb-3 border-b border-stone-800">
+                <div>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                    Section Navigation
+                  </span>
+                  <h2 className="font-serif text-xl text-cream-100">
+                    Section {currentSection.index + 1} of {STORY_SECTIONS.length}: {currentSection.title}
+                  </h2>
+                </div>
 
-            {/* Current Section Card Details */}
-            <div className="bg-stone-950/70 rounded-xl p-4 border border-stone-800/80 flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-stone-400">Subtitle</span>
-                <span className="text-xs text-cream-200 italic font-serif">
-                  &ldquo;{currentSection.subtitle}&rdquo;
-                </span>
-              </div>
-              <p className="text-xs text-stone-400 leading-relaxed mt-1">
-                {currentSection.summary}
-              </p>
-            </div>
-
-            {/* Navigation Buttons */}
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={handlePrevSection}
-                disabled={!canGoPrev || Boolean(savingAction)}
-                className={`
-                  py-3.5 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border transition-all
-                  ${
-                    canGoPrev && !savingAction
-                      ? 'bg-stone-800 hover:bg-stone-700 text-cream-100 border-stone-700 cursor-pointer shadow-md'
-                      : 'bg-stone-900/50 text-stone-600 border-stone-800 cursor-not-allowed'
-                  }
-                `}
-              >
-                <span>←</span>
-                <span>Previous Section</span>
-              </button>
-
-              <button
-                onClick={handleNextSection}
-                disabled={!canGoNext || Boolean(savingAction)}
-                className={`
-                  py-3.5 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border transition-all
-                  ${
-                    canGoNext && !savingAction
-                      ? 'bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 border-pistachio-500 cursor-pointer shadow-lg shadow-pistachio-950/50'
-                      : 'bg-stone-900/50 text-stone-600 border-stone-800 cursor-not-allowed'
-                  }
-                `}
-              >
-                <span>Next Section</span>
-                <span>→</span>
-              </button>
-            </div>
-
-            {/* Jump-to Section Selector */}
-            <div className="flex items-center gap-2 pt-2 border-t border-stone-800/60">
-              <span className="text-xs text-stone-400 whitespace-nowrap">Jump to:</span>
-              <select
-                value={session?.currentSectionIndex ?? 0}
-                onChange={(e) => handleJumpToSection(Number(e.target.value))}
-                className="w-full bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-3 py-2 outline-none focus:border-pistachio-500 cursor-pointer"
-              >
-                {STORY_SECTIONS.map((sec) => (
-                  <option key={sec.id} value={sec.index}>
-                    {sec.index + 1}. {sec.chapterNumber} — {sec.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </section>
-
-          {/* Section 2: Audio & Voice Note Controls */}
-          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-800">
-              <div>
-                <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
-                  Audio & Voice Notes
-                </span>
-                <h3 className="font-serif text-lg text-cream-100">
-                  Remote Sound Controller
-                </h3>
-              </div>
-
-              {/* Live device audio report */}
-              <div className="flex items-center gap-1.5 text-xs">
-                <span className="text-stone-400 text-[11px]">Device State:</span>
-                <span className="px-2 py-0.5 rounded-full bg-stone-800 text-pistachio-300 font-mono text-[10px] border border-stone-700">
-                  {session?.audioState ?? 'ready'}
+                <span className="text-xs text-stone-400 font-script text-base">
+                  {currentSection.chapterNumber}
                 </span>
               </div>
-            </div>
 
-            {/* Audio Track Selector for current section */}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-stone-400">Select Audio Track for Section</label>
-              <select
-                value={selectedAudioId}
-                onChange={(e) => setSelectedAudioId(e.target.value)}
-                className="w-full bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-3 py-2.5 outline-none focus:border-pistachio-500 cursor-pointer"
-              >
-                <optgroup label="Associated with this Section">
-                  {currentSection.associatedAudios.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.type === 'voice_note' ? '🎙️ [Voice Note]' : '🎵 [Music]'} {a.title}
-                    </option>
-                  ))}
-                </optgroup>
-              </select>
-            </div>
-
-            {/* Remote Play / Pause / Resume Controls */}
-            <div className="grid grid-cols-4 gap-2 pt-1">
-              <button
-                onClick={() => handleAudioAction('play')}
-                className="py-2.5 rounded-lg bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
-              >
-                <span>▶</span>
-                <span>Play</span>
-              </button>
-
-              <button
-                onClick={() => handleAudioAction('pause')}
-                className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-cream-200 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-stone-700 transition-colors"
-              >
-                <span>⏸</span>
-                <span>Pause</span>
-              </button>
-
-              <button
-                onClick={() => handleAudioAction('resume')}
-                className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-cream-200 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-stone-700 transition-colors"
-              >
-                <span>↺</span>
-                <span>Resume</span>
-              </button>
-
-              <button
-                onClick={() => handleAudioAction('stop')}
-                className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-blush-400 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-stone-700 transition-colors"
-              >
-                <span>⏹</span>
-                <span>Stop</span>
-              </button>
-            </div>
-
-            {/* Remote Volume Slider */}
-            <div className="flex flex-col gap-1.5 pt-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-stone-400">Remote Volume</span>
-                <span className="font-mono text-pistachio-300">{volumeLevel}%</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                step="5"
-                value={volumeLevel}
-                onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                className="w-full accent-pistachio-500 cursor-pointer h-1.5 bg-stone-800 rounded-lg"
-              />
-            </div>
-          </section>
-
-          {/* Section 3: Session State Controls */}
-          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
-              Live Session Overrides
-            </span>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              {/* Pause / Resume Session */}
-              <button
-                onClick={() =>
-                  executeCommand(
-                    {
-                      type: 'SET_SESSION_STATUS',
-                      status: session?.sessionStatus === 'paused' ? 'active' : 'paused',
-                    },
-                    session?.sessionStatus === 'paused' ? 'Resume Session' : 'Pause Session'
-                  )
-                }
-                className={`
-                  p-3 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all
-                  ${
-                    session?.sessionStatus === 'paused'
-                      ? 'bg-amber-950/80 border-amber-600 text-amber-200'
-                      : 'bg-stone-800 hover:bg-stone-700 border-stone-700 text-stone-200'
-                  }
-                `}
-              >
-                <span className="text-base">{session?.sessionStatus === 'paused' ? '▶' : '⏸'}</span>
-                <span>{session?.sessionStatus === 'paused' ? 'Resume Session' : 'Pause Session'}</span>
-              </button>
-
-              {/* Black Screen Toggle */}
-              <button
-                onClick={() =>
-                  executeCommand(
-                    { type: 'SET_BLACK_SCREEN', enabled: !session?.isBlackScreen },
-                    session?.isBlackScreen ? 'Disable Black Screen' : 'Enable Black Screen'
-                  )
-                }
-                className={`
-                  p-3 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all
-                  ${
-                    session?.isBlackScreen
-                      ? 'bg-stone-950 border-purple-500 text-purple-300 shadow-inner'
-                      : 'bg-stone-800 hover:bg-stone-700 border-stone-700 text-stone-200'
-                  }
-                `}
-              >
-                <span className="text-base">🌑</span>
-                <span>{session?.isBlackScreen ? 'Screen: BLACK' : 'Black Screen'}</span>
-              </button>
-
-              {/* Exit Session (modal confirmation) */}
-              <button
-                onClick={() => setShowExitModal(true)}
-                className="p-3 rounded-xl border border-blush-900/60 bg-blush-950/30 hover:bg-blush-950/60 text-blush-300 text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all"
-              >
-                <span className="text-base">🚪</span>
-                <span>End Session</span>
-              </button>
-            </div>
-          </section>
-        </div>
-
-        {/* ── Column 2: Schedule & Passcode Settings (5 cols) ── */}
-        <div className="lg:col-span-5 flex flex-col gap-6">
-
-          {/* Section 4: Schedule Management */}
-          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
-            <div className="flex items-center justify-between pb-2 border-b border-stone-800">
-              <div>
-                <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
-                  Countdown Schedule
-                </span>
-                <h3 className="font-serif text-lg text-cream-100">
-                  Agreed Session Time
-                </h3>
-              </div>
-            </div>
-
-            {/* Currently Configured Time Notice */}
-            <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex flex-col gap-1">
-              <span className="text-[11px] text-stone-400">Configured Visitor Time</span>
-              <p className="text-xs text-cream-200 font-medium">
-                {session?.scheduledAt
-                  ? formatScheduledDate(session.scheduledAt)
-                  : 'Immediate Access (No countdown configured)'}
-              </p>
-              {session?.scheduledAt && (
-                <span className="text-[10px] text-stone-500 font-mono">
-                  UTC: {new Date(session.scheduledAt).toUTCString()}
-                </span>
-              )}
-            </div>
-
-            {/* Date & Time Input Controls */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-stone-400">Date</label>
-                <input
-                  type="date"
-                  value={scheduledDate}
-                  onChange={(e) => setScheduledDate(e.target.value)}
-                  className="bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-2.5 py-2 outline-none focus:border-pistachio-500"
-                />
+              {/* Current Section Card Details */}
+              <div className="bg-stone-950/70 rounded-xl p-4 border border-stone-800/80 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-stone-400">Subtitle</span>
+                  <span className="text-xs text-cream-200 italic font-serif">
+                    &ldquo;{currentSection.subtitle}&rdquo;
+                  </span>
+                </div>
+                <p className="text-xs text-stone-400 leading-relaxed mt-1">
+                  {currentSection.summary}
+                </p>
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-stone-400">Time</label>
-                <input
-                  type="time"
-                  value={scheduledTime}
-                  onChange={(e) => setScheduledTime(e.target.value)}
-                  className="bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-2.5 py-2 outline-none focus:border-pistachio-500"
-                />
-              </div>
-            </div>
-
-            <p className="text-[10px] text-stone-500 font-mono">
-              Your timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
-            </p>
-
-            {/* Save / Clear Buttons */}
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                onClick={handleSaveSchedule}
-                disabled={Boolean(savingAction)}
-                className="py-2.5 rounded-lg bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 text-xs font-semibold uppercase tracking-wider transition-colors"
-              >
-                Save Schedule
-              </button>
-
-              <button
-                onClick={handleClearSchedule}
-                disabled={Boolean(savingAction)}
-                className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold uppercase tracking-wider border border-stone-700 transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-
-            {/* ── Admin Countdown Visibility Toggle (Default: OFF) ── */}
-            <div className="pt-3 border-t border-stone-800/80 flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-stone-300">
-                  Show countdown in admin panel
-                </span>
-
+              {/* Navigation Buttons */}
+              <div className="grid grid-cols-2 gap-3">
                 <button
-                  type="button"
-                  onClick={() => setShowAdminCountdown((prev) => !prev)}
+                  onClick={handlePrevSection}
+                  disabled={!canGoPrev || Boolean(savingAction)}
                   className={`
-                    relative inline-flex h-6 w-11 items-center rounded-full transition-colors outline-none
-                    ${showAdminCountdown ? 'bg-pistachio-600' : 'bg-stone-800 border border-stone-700'}
+                    py-3.5 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border transition-all
+                    ${
+                      canGoPrev && !savingAction
+                        ? 'bg-stone-800 hover:bg-stone-700 text-cream-100 border-stone-700 cursor-pointer shadow-md'
+                        : 'bg-stone-900/50 text-stone-600 border-stone-800 cursor-not-allowed'
+                    }
                   `}
                 >
-                  <span
-                    className={`
-                      inline-block h-4 w-4 transform rounded-full bg-white transition-transform
-                      ${showAdminCountdown ? 'translate-x-6' : 'translate-x-1'}
-                    `}
-                  />
+                  <span>←</span>
+                  <span>Previous Section</span>
+                </button>
+
+                <button
+                  onClick={handleNextSection}
+                  disabled={!canGoNext || Boolean(savingAction)}
+                  className={`
+                    py-3.5 px-4 rounded-xl text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-2 border transition-all
+                    ${
+                      canGoNext && !savingAction
+                        ? 'bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 border-pistachio-500 cursor-pointer shadow-lg shadow-pistachio-950/50'
+                        : 'bg-stone-900/50 text-stone-600 border-stone-800 cursor-not-allowed'
+                    }
+                  `}
+                >
+                  <span>Next Section</span>
+                  <span>→</span>
                 </button>
               </div>
 
-              {/* Conditional Admin Countdown Display */}
-              {showAdminCountdown && (
-                <div className="bg-stone-950 rounded-xl p-3 border border-stone-800 flex items-center justify-center gap-3 text-center">
-                  {adminCountdown && adminCountdown.total > 0 ? (
-                    <>
-                      {adminCountdown.days > 0 && (
-                        <div>
-                          <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.days)}</div>
-                          <div className="text-[9px] uppercase tracking-wider text-stone-500">Days</div>
-                        </div>
-                      )}
-                      <div>
-                        <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.hours)}</div>
-                        <div className="text-[9px] uppercase tracking-wider text-stone-500">Hours</div>
-                      </div>
-                      <span className="text-stone-600 mb-2">:</span>
-                      <div>
-                        <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.minutes)}</div>
-                        <div className="text-[9px] uppercase tracking-wider text-stone-500">Mins</div>
-                      </div>
-                      <span className="text-stone-600 mb-2">:</span>
-                      <div>
-                        <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.seconds)}</div>
-                        <div className="text-[9px] uppercase tracking-wider text-stone-500">Secs</div>
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-xs text-pistachio-400 font-mono">
-                      ✓ Scheduled time has arrived
-                    </span>
-                  )}
+              {/* Jump-to Section Selector */}
+              <div className="flex items-center gap-2 pt-2 border-t border-stone-800/60">
+                <span className="text-xs text-stone-400 whitespace-nowrap">Jump to:</span>
+                <select
+                  value={session?.currentSectionIndex ?? 0}
+                  onChange={(e) => handleJumpToSection(Number(e.target.value))}
+                  className="w-full bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-3 py-2 outline-none focus:border-pistachio-500 cursor-pointer"
+                >
+                  {STORY_SECTIONS.map((sec) => (
+                    <option key={sec.id} value={sec.index}>
+                      {sec.index + 1}. {sec.chapterNumber} — {sec.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </section>
+
+            {/* Section 2: Audio & Voice Note Controls */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+              <div className="flex items-center justify-between pb-2 border-b border-stone-800">
+                <div>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                    Audio & Voice Notes
+                  </span>
+                  <h3 className="font-serif text-lg text-cream-100">
+                    Remote Sound Controller
+                  </h3>
                 </div>
-              )}
-            </div>
-          </section>
 
-          {/* Section 5: Visitor 3-Digit Passcode Management */}
-          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
-              Visitor Access Code
-            </span>
+                {/* Live device audio report */}
+                <div className="flex items-center gap-1.5 text-xs">
+                  <span className="text-stone-400 text-[11px]">Device State:</span>
+                  <span className="px-2 py-0.5 rounded-full bg-stone-800 text-pistachio-300 font-mono text-[10px] border border-stone-700">
+                    {session?.audioState ?? 'ready'}
+                  </span>
+                </div>
+              </div>
 
-            <div className="flex items-center justify-between bg-stone-950/70 rounded-xl p-3 border border-stone-800/80">
-              <span className="text-xs text-stone-400">Current Active Code:</span>
-              <span className="font-mono text-base tracking-widest text-pistachio-300 font-bold">
-                {visitorCode}
-              </span>
-            </div>
+              {/* Audio Track Selector for current section */}
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-stone-400">Select Audio Track for Section</label>
+                <select
+                  value={selectedAudioId}
+                  onChange={(e) => setSelectedAudioId(e.target.value)}
+                  className="w-full bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-3 py-2.5 outline-none focus:border-pistachio-500 cursor-pointer"
+                >
+                  <optgroup label="Associated with this Section">
+                    {currentSection.associatedAudios.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.type === 'voice_note' ? '🎙️ [Voice Note]' : '🎵 [Music]'} {a.title}
+                      </option>
+                    ))}
+                  </optgroup>
+                </select>
+              </div>
 
-            <div className="flex gap-2">
-              <input
-                type="text"
-                maxLength={3}
-                pattern="[0-9]*"
-                placeholder="New 3-digit code"
-                value={newCodeInput}
-                onChange={(e) => setNewCodeInput(e.target.value.replace(/\D/g, '').slice(0, 3))}
-                className="w-full bg-stone-950 border border-stone-800 text-xs font-mono tracking-widest text-cream-200 rounded-lg px-3 py-2 outline-none focus:border-pistachio-500"
-              />
+              {/* Remote Play / Pause / Resume Controls */}
+              <div className="grid grid-cols-4 gap-2 pt-1">
+                <button
+                  onClick={() => handleAudioAction('play')}
+                  className="py-2.5 rounded-lg bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <span>▶</span>
+                  <span>Play</span>
+                </button>
 
-              <button
-                onClick={handleSaveVisitorCode}
-                disabled={Boolean(savingAction) || newCodeInput.length !== 3}
-                className={`
-                  px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors
-                  ${
-                    newCodeInput.length === 3 && !savingAction
-                      ? 'bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 cursor-pointer'
-                      : 'bg-stone-800 text-stone-500 cursor-not-allowed border border-stone-700/50'
-                  }
-                `}
-              >
-                Update Code
-              </button>
-            </div>
+                <button
+                  onClick={() => handleAudioAction('pause')}
+                  className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-cream-200 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-stone-700 transition-colors"
+                >
+                  <span>⏸</span>
+                  <span>Pause</span>
+                </button>
 
-            <p className="text-[11px] text-stone-500">
-              Code is verified securely server-side. Not leaked to visitor bundles.
-            </p>
-          </section>
+                <button
+                  onClick={() => handleAudioAction('resume')}
+                  className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-cream-200 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-stone-700 transition-colors"
+                >
+                  <span>↺</span>
+                  <span>Resume</span>
+                </button>
 
-          {/* Section 6: Ending Selection */}
-          <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
-            <div className="pb-2 border-b border-stone-800">
+                <button
+                  onClick={() => handleAudioAction('stop')}
+                  className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-blush-400 text-xs font-semibold uppercase tracking-wider flex items-center justify-center gap-1.5 border border-stone-700 transition-colors"
+                >
+                  <span>⏹</span>
+                  <span>Stop</span>
+                </button>
+              </div>
+
+              {/* Remote Volume Slider */}
+              <div className="flex flex-col gap-1.5 pt-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-stone-400">Remote Volume</span>
+                  <span className="font-mono text-pistachio-300">{volumeLevel}%</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value={volumeLevel}
+                  onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                  className="w-full accent-pistachio-500 cursor-pointer h-1.5 bg-stone-800 rounded-lg"
+                />
+              </div>
+            </section>
+
+            {/* Section 3: Session State Controls */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
               <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
-                Ending Selection
+                Live Session Overrides
               </span>
-              <h3 className="font-serif text-lg text-cream-100">Choose the Story Ending</h3>
-              <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
-                You must explicitly choose an ending. None is ever selected automatically.
-                Only select Ending C when she has clearly and voluntarily expressed comfort discussing a romantic conversation.
-              </p>
-            </div>
 
-            {/* Current ending display */}
-            <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex items-center justify-between">
-              <span className="text-xs text-stone-400">Currently selected:</span>
-              <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded-full ${
-                session?.selectedEnding === 'ending-a'
-                  ? 'bg-pistachio-950 text-pistachio-300 border border-pistachio-800'
-                  : session?.selectedEnding === 'ending-b'
-                  ? 'bg-stone-800 text-blush-300 border border-blush-900/60'
-                  : session?.selectedEnding === 'ending-c'
-                  ? 'bg-stone-800 text-amber-300 border border-amber-900/60'
-                  : 'bg-stone-800 text-stone-400 border border-stone-700'
-              }`}>
-                {session?.selectedEnding === 'ending-a' && '✓ Ending A — Normal Goodbye'}
-                {session?.selectedEnding === 'ending-b' && '✓ Ending B — Emotional Goodbye'}
-                {session?.selectedEnding === 'ending-c' && '✓ Ending C — Romantic Conversation'}
-                {!session?.selectedEnding && 'None — default closing shown'}
-              </span>
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Pause / Resume Session */}
+                <button
+                  onClick={() =>
+                    executeCommand(
+                      {
+                        type: 'SET_SESSION_STATUS',
+                        status: session?.sessionStatus === 'paused' ? 'active' : 'paused',
+                      },
+                      session?.sessionStatus === 'paused' ? 'Resume Session' : 'Pause Session'
+                    )
+                  }
+                  className={`
+                    p-3 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all
+                    ${
+                      session?.sessionStatus === 'paused'
+                        ? 'bg-amber-950/80 border-amber-600 text-amber-200'
+                        : 'bg-stone-800 hover:bg-stone-700 border-stone-700 text-stone-200'
+                    }
+                  `}
+                >
+                  <span className="text-base">{session?.sessionStatus === 'paused' ? '▶' : '⏸'}</span>
+                  <span>{session?.sessionStatus === 'paused' ? 'Resume Session' : 'Pause Session'}</span>
+                </button>
 
-            {/* Ending A */}
-            <button
-              onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-a' }, 'Set Ending A')}
-              disabled={Boolean(savingAction)}
-              className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                session?.selectedEnding === 'ending-a'
-                  ? 'bg-pistachio-950/80 border-pistachio-700 text-pistachio-200'
-                  : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
-              }`}
-            >
-              <span className="text-lg mt-0.5">🌿</span>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold uppercase tracking-wider">Ending A — Normal Goodbye</span>
-                <span className="text-[11px] text-stone-400 leading-relaxed">
-                  Gentle conclusion. Warm appreciation, wishes her happiness. No expectations.
-                </span>
+                {/* Black Screen Toggle */}
+                <button
+                  onClick={() =>
+                    executeCommand(
+                      { type: 'SET_BLACK_SCREEN', enabled: !session?.isBlackScreen },
+                      session?.isBlackScreen ? 'Disable Black Screen' : 'Enable Black Screen'
+                    )
+                  }
+                  className={`
+                    p-3 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all
+                    ${
+                      session?.isBlackScreen
+                        ? 'bg-stone-950 border-purple-500 text-purple-300 shadow-inner'
+                        : 'bg-stone-800 hover:bg-stone-700 border-stone-700 text-stone-200'
+                    }
+                  `}
+                >
+                  <span className="text-base">🌑</span>
+                  <span>{session?.isBlackScreen ? 'Screen: BLACK' : 'Black Screen'}</span>
+                </button>
+
+                {/* Exit Session (modal confirmation) */}
+                <button
+                  onClick={() => setShowExitModal(true)}
+                  className="p-3 rounded-xl border border-blush-900/60 bg-blush-950/30 hover:bg-blush-950/60 text-blush-300 text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all"
+                >
+                  <span className="text-base">🚪</span>
+                  <span>End Session</span>
+                </button>
               </div>
-            </button>
+            </section>
 
-            {/* Ending B */}
-            <button
-              onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-b' }, 'Set Ending B')}
-              disabled={Boolean(savingAction)}
-              className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                session?.selectedEnding === 'ending-b'
-                  ? 'bg-blush-950/60 border-blush-800/80 text-blush-200'
-                  : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
-              }`}
-            >
-              <span className="text-lg mt-0.5">🥀</span>
-              <div className="flex flex-col gap-0.5">
-                <span className="text-xs font-semibold uppercase tracking-wider">Ending B — Emotional Goodbye</span>
-                <span className="text-[11px] text-stone-400 leading-relaxed">
-                  Honest about feelings. Notes need for distance. She has done nothing wrong.
+            {/* Section 4: Romantic Twist Controls */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+              <div className="pb-3 border-b border-stone-800">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-rose-400">
+                  Phase 4 — Romantic Twist Experience
                 </span>
-              </div>
-            </button>
-
-            {/* Ending C — with mandatory consent warning */}
-            <div className="flex flex-col gap-2">
-              <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-950/40 border border-amber-900/60">
-                <span className="text-amber-400 text-xs mt-0.5">⚠</span>
-                <p className="text-[11px] text-amber-300/90 leading-relaxed">
-                  <strong>Consent required.</strong> Only select this ending if she has explicitly and voluntarily said she is comfortable discussing romantic feelings. Do not infer from reactions.
+                <h3 className="font-serif text-lg text-cream-100">Glass Shatter Trigger</h3>
+                <p className="text-[11px] text-stone-400 mt-1 leading-relaxed">
+                  Activating the Twist replaces the scrapbook with a personal romantic declaration experience, preceded by a glass-shatter screen transition.
+                  Only trigger this when the moment is right.
                 </p>
               </div>
+
+              <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex items-center justify-between">
+                <span className="text-xs text-stone-400">Current State:</span>
+                <span className={`font-mono text-xs px-2 py-0.5 rounded-full font-semibold ${
+                  session?.isTwistActive
+                    ? 'bg-rose-950/80 border border-rose-700 text-rose-300'
+                    : 'bg-stone-800 border border-stone-700 text-stone-400'
+                }`}>
+                  {session?.isTwistActive ? '✨ Twist Active' : '— Not Yet Triggered'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowTwistModal(true)}
+                  disabled={Boolean(savingAction) || Boolean(session?.isTwistActive)}
+                  className={`p-3.5 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1.5 text-center transition-all ${
+                    !session?.isTwistActive && !savingAction
+                      ? 'bg-rose-950/60 hover:bg-rose-950/90 border-rose-700/80 text-rose-200 shadow-lg shadow-rose-950/30'
+                      : 'bg-stone-900/50 border-stone-800 text-stone-600 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="text-lg">💖</span>
+                  <span>Trigger Twist</span>
+                  <span className="text-[10px] text-rose-400/70 font-normal normal-case">Glass shatter → romantic screen</span>
+                </button>
+
+                <button
+                  onClick={() => executeCommand({ type: 'SET_TWIST', enabled: false }, 'Reset Twist')}
+                  disabled={Boolean(savingAction) || !session?.isTwistActive}
+                  className={`p-3.5 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1.5 text-center transition-all ${
+                    session?.isTwistActive && !savingAction
+                      ? 'bg-stone-800 hover:bg-stone-700 border-stone-700 text-stone-200'
+                      : 'bg-stone-900/50 border-stone-800 text-stone-600 cursor-not-allowed'
+                  }`}
+                >
+                  <span className="text-lg">↩</span>
+                  <span>Reset Twist</span>
+                  <span className="text-[10px] text-stone-500 font-normal normal-case">Returns to scrapbook</span>
+                </button>
+              </div>
+            </section>
+          </div>
+
+          {/* ── Column 2: Schedule & Passcode Settings (5 cols) ── */}
+          <div className="lg:col-span-5 flex flex-col gap-6">
+
+            {/* Section 5: Schedule Management */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+              <div className="flex items-center justify-between pb-2 border-b border-stone-800">
+                <div>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                    Countdown Schedule
+                  </span>
+                  <h3 className="font-serif text-lg text-cream-100">
+                    Agreed Session Time
+                  </h3>
+                </div>
+              </div>
+
+              {/* Currently Configured Time Notice */}
+              <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex flex-col gap-1">
+                <span className="text-[11px] text-stone-400">Configured Visitor Time</span>
+                <p className="text-xs text-cream-200 font-medium">
+                  {session?.scheduledAt
+                    ? formatScheduledDate(session.scheduledAt)
+                    : 'Immediate Access (No countdown configured)'}
+                </p>
+                {session?.scheduledAt && (
+                  <span className="text-[10px] text-stone-500 font-mono">
+                    UTC: {new Date(session.scheduledAt).toUTCString()}
+                  </span>
+                )}
+              </div>
+
+              {/* Date & Time Input Controls */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-stone-400">Date</label>
+                  <input
+                    type="date"
+                    value={scheduledDate}
+                    onChange={(e) => setScheduledDate(e.target.value)}
+                    className="bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-2.5 py-2 outline-none focus:border-pistachio-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] text-stone-400">Time</label>
+                  <input
+                    type="time"
+                    value={scheduledTime}
+                    onChange={(e) => setScheduledTime(e.target.value)}
+                    className="bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-2.5 py-2 outline-none focus:border-pistachio-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-stone-500 font-mono">
+                Your timezone: {Intl.DateTimeFormat().resolvedOptions().timeZone}
+              </p>
+
+              {/* Save / Clear Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={handleSaveSchedule}
+                  disabled={Boolean(savingAction)}
+                  className="py-2.5 rounded-lg bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 text-xs font-semibold uppercase tracking-wider transition-colors"
+                >
+                  Save Schedule
+                </button>
+
+                <button
+                  onClick={handleClearSchedule}
+                  disabled={Boolean(savingAction)}
+                  className="py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold uppercase tracking-wider border border-stone-700 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+
+              {/* ── Admin Countdown Visibility Toggle (Default: OFF) ── */}
+              <div className="pt-3 border-t border-stone-800/80 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-stone-300">
+                    Show countdown in admin panel
+                  </span>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowAdminCountdown((prev) => !prev)}
+                    className={`
+                      relative inline-flex h-6 w-11 items-center rounded-full transition-colors outline-none
+                      ${showAdminCountdown ? 'bg-pistachio-600' : 'bg-stone-800 border border-stone-700'}
+                    `}
+                  >
+                    <span
+                      className={`
+                        inline-block h-4 w-4 transform rounded-full bg-white transition-transform
+                        ${showAdminCountdown ? 'translate-x-6' : 'translate-x-1'}
+                      `}
+                    />
+                  </button>
+                </div>
+
+                {/* Conditional Admin Countdown Display */}
+                {showAdminCountdown && (
+                  <div className="bg-stone-950 rounded-xl p-3 border border-stone-800 flex items-center justify-center gap-3 text-center">
+                    {adminCountdown && adminCountdown.total > 0 ? (
+                      <>
+                        {adminCountdown.days > 0 && (
+                          <div>
+                            <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.days)}</div>
+                            <div className="text-[9px] uppercase tracking-wider text-stone-500">Days</div>
+                          </div>
+                        )}
+                        <div>
+                          <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.hours)}</div>
+                          <div className="text-[9px] uppercase tracking-wider text-stone-500">Hours</div>
+                        </div>
+                        <span className="text-stone-600 mb-2">:</span>
+                        <div>
+                          <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.minutes)}</div>
+                          <div className="text-[9px] uppercase tracking-wider text-stone-500">Mins</div>
+                        </div>
+                        <span className="text-stone-600 mb-2">:</span>
+                        <div>
+                          <div className="text-lg font-mono text-cream-100">{pad(adminCountdown.seconds)}</div>
+                          <div className="text-[9px] uppercase tracking-wider text-stone-500">Secs</div>
+                        </div>
+                      </>
+                    ) : (
+                      <span className="text-xs text-pistachio-400 font-mono">
+                        ✓ Scheduled time has arrived
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Section 6: Visitor 3-Digit Passcode Management */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                Visitor Access Code
+              </span>
+
+              <div className="flex items-center justify-between bg-stone-950/70 rounded-xl p-3 border border-stone-800/80">
+                <span className="text-xs text-stone-400">Current Active Code:</span>
+                <span className="font-mono text-base tracking-widest text-pistachio-300 font-bold">
+                  {visitorCode}
+                </span>
+              </div>
+
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  maxLength={3}
+                  pattern="[0-9]*"
+                  placeholder="New 3-digit code"
+                  value={newCodeInput}
+                  onChange={(e) => setNewCodeInput(e.target.value.replace(/\D/g, '').slice(0, 3))}
+                  className="w-full bg-stone-950 border border-stone-800 text-xs font-mono tracking-widest text-cream-200 rounded-lg px-3 py-2 outline-none focus:border-pistachio-500"
+                />
+
+                <button
+                  onClick={handleSaveVisitorCode}
+                  disabled={Boolean(savingAction) || newCodeInput.length !== 3}
+                  className={`
+                    px-4 py-2 rounded-lg text-xs font-semibold uppercase tracking-wider whitespace-nowrap transition-colors
+                    ${
+                      newCodeInput.length === 3 && !savingAction
+                        ? 'bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 cursor-pointer'
+                        : 'bg-stone-800 text-stone-500 cursor-not-allowed border border-stone-700/50'
+                    }
+                  `}
+                >
+                  Update Code
+                </button>
+              </div>
+
+              <p className="text-[11px] text-stone-500">
+                Code is verified securely server-side. Not leaked to visitor bundles.
+              </p>
+            </section>
+
+            {/* Section 7: Ending Selection */}
+            <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+              <div className="pb-2 border-b border-stone-800">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                  Ending Selection
+                </span>
+                <h3 className="font-serif text-lg text-cream-100">Choose the Story Ending</h3>
+                <p className="text-[11px] text-stone-500 mt-1 leading-relaxed">
+                  You must explicitly choose an ending. None is ever selected automatically.
+                  Only select Ending C when she has clearly and voluntarily expressed comfort discussing a romantic conversation.
+                </p>
+              </div>
+
+              {/* Current ending display */}
+              <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex items-center justify-between">
+                <span className="text-xs text-stone-400">Currently selected:</span>
+                <span className={`font-mono text-xs font-semibold px-2 py-0.5 rounded-full ${
+                  session?.selectedEnding === 'ending-a'
+                    ? 'bg-pistachio-950 text-pistachio-300 border border-pistachio-800'
+                    : session?.selectedEnding === 'ending-b'
+                    ? 'bg-stone-800 text-blush-300 border border-blush-900/60'
+                    : session?.selectedEnding === 'ending-c'
+                    ? 'bg-stone-800 text-amber-300 border border-amber-900/60'
+                    : 'bg-stone-800 text-stone-400 border border-stone-700'
+                }`}>
+                  {session?.selectedEnding === 'ending-a' && '✓ Ending A — Normal Goodbye'}
+                  {session?.selectedEnding === 'ending-b' && '✓ Ending B — Emotional Goodbye'}
+                  {session?.selectedEnding === 'ending-c' && '✓ Ending C — Romantic Conversation'}
+                  {!session?.selectedEnding && 'None — default closing shown'}
+                </span>
+              </div>
+
+              {/* Ending A */}
               <button
-                onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-c' }, 'Set Ending C')}
+                onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-a' }, 'Set Ending A')}
                 disabled={Boolean(savingAction)}
                 className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
-                  session?.selectedEnding === 'ending-c'
-                    ? 'bg-amber-950/40 border-amber-700/80 text-amber-200'
+                  session?.selectedEnding === 'ending-a'
+                    ? 'bg-pistachio-950/80 border-pistachio-700 text-pistachio-200'
                     : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
                 }`}
               >
-                <span className="text-lg mt-0.5">💌</span>
+                <span className="text-lg mt-0.5">🌿</span>
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-xs font-semibold uppercase tracking-wider">Ending C — Romantic Conversation</span>
+                  <span className="text-xs font-semibold uppercase tracking-wider">Ending A — Normal Goodbye</span>
                   <span className="text-[11px] text-stone-400 leading-relaxed">
-                    Honest, respectful expression of feelings. Open invitation to talk. No pressure.
+                    Gentle conclusion. Warm appreciation, wishes her happiness. No expectations.
                   </span>
                 </div>
               </button>
-            </div>
 
-            {/* Clear ending */}
-            {session?.selectedEnding && (
+              {/* Ending B */}
               <button
-                onClick={() => executeCommand({ type: 'SET_ENDING', ending: null }, 'Clear Ending')}
+                onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-b' }, 'Set Ending B')}
                 disabled={Boolean(savingAction)}
-                className="w-full py-2 rounded-lg bg-stone-800/40 hover:bg-stone-800 border border-stone-700/50 text-stone-400 text-xs font-semibold uppercase tracking-wider transition-colors"
+                className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                  session?.selectedEnding === 'ending-b'
+                    ? 'bg-blush-950/60 border-blush-800/80 text-blush-200'
+                    : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
+                }`}
               >
-                Clear — Show Default Closing
+                <span className="text-lg mt-0.5">🥀</span>
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider">Ending B — Emotional Goodbye</span>
+                  <span className="text-[11px] text-stone-400 leading-relaxed">
+                    Honest about feelings. Notes need for distance. She has done nothing wrong.
+                  </span>
+                </div>
               </button>
+
+              {/* Ending C — with mandatory consent warning */}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-start gap-2 px-3 py-2 rounded-lg bg-amber-950/40 border border-amber-900/60">
+                  <span className="text-amber-400 text-xs mt-0.5">⚠</span>
+                  <p className="text-[11px] text-amber-300/90 leading-relaxed">
+                    <strong>Consent required.</strong> Only select this ending if she has explicitly and voluntarily said she is comfortable discussing romantic feelings. Do not infer from reactions.
+                  </p>
+                </div>
+                <button
+                  onClick={() => executeCommand({ type: 'SET_ENDING', ending: 'ending-c' }, 'Set Ending C')}
+                  disabled={Boolean(savingAction)}
+                  className={`w-full p-3.5 rounded-xl border text-left transition-all flex items-start gap-3 ${
+                    session?.selectedEnding === 'ending-c'
+                      ? 'bg-amber-950/40 border-amber-700/80 text-amber-200'
+                      : 'bg-stone-800/60 hover:bg-stone-800 border-stone-700 text-stone-200'
+                  }`}
+                >
+                  <span className="text-lg mt-0.5">💌</span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-xs font-semibold uppercase tracking-wider">Ending C — Romantic Conversation</span>
+                    <span className="text-[11px] text-stone-400 leading-relaxed">
+                      Honest, respectful expression of feelings. Open invitation to talk. No pressure.
+                    </span>
+                  </div>
+                </button>
+              </div>
+
+              {/* Clear ending */}
+              {session?.selectedEnding && (
+                <button
+                  onClick={() => executeCommand({ type: 'SET_ENDING', ending: null }, 'Clear Ending')}
+                  disabled={Boolean(savingAction)}
+                  className="w-full py-2 rounded-lg bg-stone-800/40 hover:bg-stone-800 border border-stone-700/50 text-stone-400 text-xs font-semibold uppercase tracking-wider transition-colors"
+                >
+                  Clear — Show Default Closing
+                </button>
+              )}
+            </section>
+
+            {/* Section 8: Notifications History */}
+            {(session?.notifications?.length ?? 0) > 0 && (
+              <section className="bg-stone-900 border border-stone-800 rounded-2xl p-5 shadow-xl flex flex-col gap-4">
+                <div className="flex items-center justify-between pb-2 border-b border-stone-800">
+                  <div>
+                    <span className="text-[11px] font-mono uppercase tracking-wider text-pistachio-400">
+                      Notification History
+                    </span>
+                    <h3 className="font-serif text-lg text-cream-100">Visitor Events</h3>
+                  </div>
+                  <button
+                    onClick={() => executeCommand({ type: 'CLEAR_NOTIFICATIONS' }, 'Clear all notifications')}
+                    className="text-[11px] px-2.5 py-1 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700"
+                  >
+                    Clear All
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  {session?.notifications?.map((n: NotificationItem) => (
+                    <div
+                      key={n.id}
+                      className={`flex items-start gap-3 px-3 py-2.5 rounded-xl border text-xs ${
+                        n.read
+                          ? 'bg-stone-950/50 border-stone-800/60 text-stone-500'
+                          : 'bg-stone-900 border-rose-800/60 text-rose-200'
+                      }`}
+                    >
+                      <span className="text-sm shrink-0">{n.read ? '✓' : '💌'}</span>
+                      <div className="flex flex-col gap-0.5 min-w-0">
+                        <span className="font-medium leading-tight">{n.message}</span>
+                        <span className="text-[10px] font-mono text-stone-500">
+                          {new Date(n.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                      {!n.read && (
+                        <button
+                          onClick={() => executeCommand({ type: 'DISMISS_NOTIFICATION', id: n.id }, 'Dismiss')}
+                          className="text-stone-500 hover:text-stone-300 text-xs shrink-0"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
             )}
-          </section>
-        </div>
-      </main>
+          </div>
+        </main>
+      )}
+
+      {/* ── Tab: CMS Content Editor ── */}
+      {activeTab === 'cms' && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <AdminCmsPanel
+            cmsData={session?.cmsData}
+            onCmsUpdated={fetchAdminState}
+          />
+        </main>
+      )}
+
+      {/* ── Tab: Photo Manager ── */}
+      {activeTab === 'photos' && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <AdminPhotoManager />
+        </main>
+      )}
 
       {/* ── Confirmation Modal: End Session ── */}
       <AnimatePresence>
@@ -841,6 +1065,50 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   className="py-2.5 rounded-xl bg-blush-600 hover:bg-blush-500 text-stone-950 text-xs font-semibold uppercase tracking-wider shadow-md"
                 >
                   Confirm Exit
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirmation Modal: Trigger Romantic Twist ── */}
+      <AnimatePresence>
+        {showTwistModal && (
+          <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-sm bg-stone-900 border border-rose-800/80 rounded-2xl p-6 shadow-2xl flex flex-col gap-4 text-center"
+            >
+              <div className="text-3xl">💖</div>
+              <h3 className="font-serif text-xl text-cream-100">
+                Trigger Romantic Twist?
+              </h3>
+              <p className="text-xs text-stone-400 leading-relaxed">
+                This will trigger the glass-shatter animation on her screen and reveal the romantic declaration experience.
+                This action cannot be undone without a manual reset.
+              </p>
+              <div className="text-[11px] text-rose-400/80 bg-rose-950/40 border border-rose-800/60 rounded-xl p-3">
+                ⚠️ Only do this when you are both present and the moment feels right.
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2">
+                <button
+                  onClick={() => setShowTwistModal(false)}
+                  className="py-2.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-semibold uppercase tracking-wider border border-stone-700"
+                >
+                  Not Yet
+                </button>
+                <button
+                  onClick={() => {
+                    setShowTwistModal(false);
+                    executeCommand({ type: 'SET_TWIST', enabled: true }, 'Trigger Romantic Twist');
+                  }}
+                  className="py-2.5 rounded-xl bg-rose-700 hover:bg-rose-600 text-white text-xs font-semibold uppercase tracking-wider shadow-md"
+                >
+                  Trigger 💌
                 </button>
               </div>
             </motion.div>
