@@ -1,0 +1,29 @@
+{
+  "sessionId": "session_primary",
+  "storyTitle": "A Story for You",
+  "scheduledAt": null,
+  "sessionStatus": "scheduled",
+  "currentSectionId": "hero",
+  "currentSectionIndex": 0,
+  "totalSections": 5,
+  "selectedEnding": null,
+  "isBlackScreen": false,
+  "isTwistActive": false,
+  "readyToBeginAt": "2026-10-25T05:36:01.140Z",
+  "notifications": [],
+  "cmsData": {
+    "heroTitle": "Preserved Value",
+    "twistWish": "My wish has always been you.",
+    "letterTitle": "New Letter Title",
+    "twistTitle": "A Confession",
+    "endingAWish": "Stay warm and be loved."
+  },
+  "selectedAudioId": "music-reverie",
+  "audioCommand": "none",
+  "audioState": "ready",
+  "audioType": "music",
+  "audioVolume": 65,
+  "commandSeq": 747,
+  "lastCommand": "SET_SCHEDULE",
+  "updatedAt": "2026-10-25T05:36:03.031Z"
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "id": "test-1",
+    "imageUrl": "/test.jpg",
+    "caption": "Test",
+    "categorySlug": "the-golden-hour",
+    "orderIndex": 0,
+    "isCover": false,
+    "createdAt": "2026-10-25T05:36:01.113Z"
+  }
+]

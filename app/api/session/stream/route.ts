@@ -1,15 +1,17 @@
 import { NextRequest } from 'next/server';
-import { getVisitorState, subscribeToSession, type StorySessionState } from '@/lib/server-state';
+import { getAuthoritativeSessionState, subscribeToSession, type StorySessionState } from '@/lib/server-state';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const encoder = new TextEncoder();
 
+  // Ensure server state is hydrated from Supabase/cache before serving stream
+  const initial = await getAuthoritativeSessionState();
+
   const stream = new ReadableStream({
     start(controller) {
       // 1. Send initial session state immediately
-      const initial = getVisitorState();
       controller.enqueue(encoder.encode(`data: ${JSON.stringify(initial)}\n\n`));
 
       // 2. Subscribe to real-time session state changes

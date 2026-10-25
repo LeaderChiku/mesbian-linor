@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "npx tsx scripts/test-phase3.mjs",
     "test:p4": "npx tsx scripts/test-phase4.mjs",
-    "test:all": "npx tsx scripts/test-phase3.mjs && npx tsx scripts/test-phase4.mjs"
+    "test:persistence": "npx tsx scripts/test-schedule-persistence.mjs",
+    "test:all": "npx tsx scripts/test-phase3.mjs && npx tsx scripts/test-phase4.mjs && npx tsx scripts/test-schedule-persistence.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

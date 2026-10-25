@@ -155,7 +155,7 @@ insert into story_sessions (
 ) values (
   'session_primary',
   'A Story for You',
-  now() + interval '24 hours',
+  null,
   'scheduled',
   'hero',
   0,

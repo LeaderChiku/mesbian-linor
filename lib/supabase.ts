@@ -17,9 +17,14 @@ export const supabase =
  * Never accessible in browser client bundles.
  */
 export function getSupabaseServerClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+  const url =
+    process.env.SUPABASE_URL ||
+    process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    '';
   const key =
     process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    process.env.SUPABASE_SECRET_KEY ||
+    process.env.SUPABASE_ANON_KEY ||
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
     '';
   if (!url || !key) return null;
@@ -41,7 +46,7 @@ export type StoryConfig = {
 /**
  * Default fallback configuration used when Supabase is not yet set up
  * or during development.
- * Schedules the moment 24 hours into the future so countdown is immediately observable.
+ * If no schedule is configured, scheduled_at is null (unscheduled state).
  */
 export function getDefaultStoryConfig(): StoryConfig {
   // Check if a client-side override exists (e.g., from dev controls or query params)
@@ -72,13 +77,12 @@ export function getDefaultStoryConfig(): StoryConfig {
     }
   }
 
-  // Fallback to environment variable or 24h future schedule
-  const envScheduled = process.env.NEXT_PUBLIC_SCHEDULED_AT;
-  const defaultFutureDate = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  // Fallback to environment variable or explicit null (unscheduled)
+  const envScheduled = process.env.NEXT_PUBLIC_SCHEDULED_AT || null;
 
   return {
     id: 'default-config',
-    scheduled_at: envScheduled || defaultFutureDate,
+    scheduled_at: envScheduled,
     access_code: '***',
     is_enabled: true,
     story_title: 'A Story for You',

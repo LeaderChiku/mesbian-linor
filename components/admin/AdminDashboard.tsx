@@ -69,6 +69,9 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           const min = String(d.getMinutes()).padStart(2, '0');
           setScheduledDate(`${yyyy}-${mm}-${dd}`);
           setScheduledTime(`${hh}:${min}`);
+        } else {
+          setScheduledDate('');
+          setScheduledTime('');
         }
         if (data.state?.audioVolume) {
           setVolumeLevel(data.state.audioVolume);

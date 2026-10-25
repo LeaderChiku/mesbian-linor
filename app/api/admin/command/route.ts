@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyAdminToken, ADMIN_COOKIE_NAME } from '@/lib/admin-auth';
 import {
   getSessionState,
+  getAuthoritativeSessionState,
   getStoredVisitorCode,
   applyAdminCommand,
   syncSessionWithSupabase,
@@ -21,7 +22,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized. Admin authentication required.' }, { status: 401 });
   }
 
-  const state = getSessionState();
+  const state = await getAuthoritativeSessionState();
   const visitorCode = getStoredVisitorCode();
 
   return NextResponse.json({
