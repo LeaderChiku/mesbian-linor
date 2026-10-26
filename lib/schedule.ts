@@ -68,3 +68,70 @@ export function formatScheduledDate(scheduledAt: string): string {
     return '';
   }
 }
+
+/**
+ * Format timestamp in Asia/Kolkata (IST, UTC+5:30).
+ */
+export function formatKolkataDate(scheduledAt: string): string {
+  try {
+    const date = new Date(scheduledAt);
+    if (isNaN(date.getTime())) return '';
+
+    return new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      weekday: 'long',
+      month:   'long',
+      day:     'numeric',
+      hour:    'numeric',
+      minute:  '2-digit',
+      timeZoneName: 'short',
+    }).format(date);
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Parse date and time entered in Asia/Kolkata (IST) into a UTC ISO string.
+ * dateStr: YYYY-MM-DD
+ * timeStr: HH:mm (24-hour)
+ */
+export function kolkataToUTC(dateStr: string, timeStr: string): string | null {
+  try {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !/^\d{2}:\d{2}$/.test(timeStr)) {
+      return null;
+    }
+    const isoWithOffset = `${dateStr}T${timeStr}:00+05:30`;
+    const d = new Date(isoWithOffset);
+    if (isNaN(d.getTime())) return null;
+    return d.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Convert UTC ISO string into date and time parts in Asia/Kolkata timezone.
+ */
+export function utcToKolkataParts(isoString: string): { date: string; time: string } | null {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return null;
+    const formatter = new Intl.DateTimeFormat('en-GB', {
+      timeZone: 'Asia/Kolkata',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(d);
+    const get = (type: string) => parts.find((p) => p.type === type)?.value || '';
+    const date = `${get('year')}-${get('month')}-${get('day')}`;
+    const time = `${get('hour')}:${get('minute')}`;
+    return { date, time };
+  } catch {
+    return null;
+  }
+}

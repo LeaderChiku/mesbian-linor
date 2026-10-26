@@ -21,6 +21,7 @@ export interface StorySessionState {
   sessionStatus: 'scheduled' | 'active' | 'paused' | 'ended';
   currentSectionId: string;
   currentSectionIndex: number;
+  unlockedChapterIndex: number; // 0 = Prologue, 1 = Ch 1, 2 = Ch 2, 3 = Ch 3, 4 = Ch 4
   totalSections: number;
   selectedEnding: string | null;
   isBlackScreen: boolean;
@@ -94,6 +95,7 @@ export function ensureSessionState(): StorySessionState {
       sessionStatus: cachedState?.sessionStatus || 'scheduled',
       currentSectionId: cachedState?.currentSectionId || STORY_SECTIONS[0].id,
       currentSectionIndex: cachedState?.currentSectionIndex ?? 0,
+      unlockedChapterIndex: cachedState?.unlockedChapterIndex ?? cachedState?.currentSectionIndex ?? 0,
       totalSections: STORY_SECTIONS.length,
       selectedEnding: cachedState?.selectedEnding || null,
       isBlackScreen: cachedState?.isBlackScreen ?? false,
@@ -141,6 +143,7 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
       session_status: state.sessionStatus,
       current_section_id: state.currentSectionId,
       current_section_index: state.currentSectionIndex,
+      unlocked_chapter_index: state.unlockedChapterIndex ?? 0,
       total_sections: state.totalSections,
       selected_ending: state.selectedEnding,
       is_black_screen: state.isBlackScreen,
@@ -187,11 +190,21 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
         { onConflict: 'session_id' }
       );
       if (fallbackResult.error) {
-        // Fallback 2: Direct update of scheduled_at
-        await supabase
+        // Fallback 2: Minimal upsert with just session_id and scheduled_at
+        const minimalUpsert = await supabase
           .from('story_sessions')
-          .update({ scheduled_at: state.scheduledAt, updated_at: new Date().toISOString() })
-          .eq('session_id', state.sessionId);
+          .upsert(
+            {
+              session_id: state.sessionId,
+              scheduled_at: state.scheduledAt,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'session_id' }
+          );
+        if (minimalUpsert.error) {
+          console.error('[supabase sync write error]:', minimalUpsert.error.message);
+          return false;
+        }
       }
     }
     return true;
@@ -227,6 +240,9 @@ export async function loadSessionFromSupabase(): Promise<Partial<StorySessionSta
       sessionStatus: data.session_status || undefined,
       currentSectionId: data.current_section_id || undefined,
       currentSectionIndex: typeof data.current_section_index === 'number' ? data.current_section_index : undefined,
+      unlockedChapterIndex: typeof data.unlocked_chapter_index === 'number'
+        ? data.unlocked_chapter_index
+        : (typeof data.current_section_index === 'number' ? data.current_section_index : undefined),
       totalSections: typeof data.total_sections === 'number' ? data.total_sections : undefined,
       selectedEnding: data.selected_ending !== undefined ? data.selected_ending : null,
       isBlackScreen: typeof data.is_black_screen === 'boolean' ? data.is_black_screen : undefined,
@@ -323,7 +339,7 @@ export function applyAdminCommand(
   action:
     | { type: 'SET_SCHEDULE'; scheduledAt: string | null }
     | { type: 'SET_VISITOR_CODE'; code: string }
-    | { type: 'NAVIGATE'; sectionIndex: number }
+    | { type: 'NAVIGATE'; sectionIndex: number; unlockedChapterIndex?: number }
     | { type: 'AUDIO_CONTROL'; command: 'play' | 'pause' | 'resume' | 'stop'; audioId?: string; volume?: number; audioType?: 'music' | 'voice_note' }
     | { type: 'SET_SESSION_STATUS'; status: 'scheduled' | 'active' | 'paused' | 'ended' }
     | { type: 'SET_BLACK_SCREEN'; enabled: boolean }
@@ -367,6 +383,11 @@ export function applyAdminCommand(
     case 'NAVIGATE': {
       const idx = Math.max(0, Math.min(action.sectionIndex, STORY_SECTIONS.length - 1));
       current.currentSectionIndex = idx;
+      if (typeof action.unlockedChapterIndex === 'number') {
+        current.unlockedChapterIndex = Math.max(0, Math.min(action.unlockedChapterIndex, STORY_SECTIONS.length - 1));
+      } else {
+        current.unlockedChapterIndex = Math.max(current.unlockedChapterIndex ?? 0, idx);
+      }
       current.currentSectionId = STORY_SECTIONS[idx].id;
       current.commandSeq += 1;
       current.lastCommand = `NAVIGATE_TO_${idx}`;

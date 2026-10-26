@@ -7,7 +7,14 @@ import {
   getSectionByIndex,
   type StorySection,
 } from '@/lib/sections';
-import { getTimeRemaining, formatScheduledDate, pad } from '@/lib/schedule';
+import {
+  getTimeRemaining,
+  formatScheduledDate,
+  formatKolkataDate,
+  kolkataToUTC,
+  utcToKolkataParts,
+  pad,
+} from '@/lib/schedule';
 import type { StorySessionState, NotificationItem } from '@/lib/server-state';
 import AdminCmsPanel from '@/components/admin/AdminCmsPanel';
 import AdminPhotoManager from '@/components/admin/AdminPhotoManager';
@@ -60,15 +67,11 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           setNewCodeInput(data.visitorCode);
         }
         if (data.state?.scheduledAt) {
-          const d = new Date(data.state.scheduledAt);
-          // Format for HTML date & time inputs
-          const yyyy = d.getFullYear();
-          const mm = String(d.getMonth() + 1).padStart(2, '0');
-          const dd = String(d.getDate()).padStart(2, '0');
-          const hh = String(d.getHours()).padStart(2, '0');
-          const min = String(d.getMinutes()).padStart(2, '0');
-          setScheduledDate(`${yyyy}-${mm}-${dd}`);
-          setScheduledTime(`${hh}:${min}`);
+          const parts = utcToKolkataParts(data.state.scheduledAt);
+          if (parts) {
+            setScheduledDate(parts.date);
+            setScheduledTime(parts.time);
+          }
         } else {
           setScheduledDate('');
           setScheduledTime('');
@@ -142,12 +145,12 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       setBannerNotice({ type: 'error', text: 'Please select both a valid date and time.' });
       return;
     }
-    const combined = new Date(`${scheduledDate}T${scheduledTime}:00`);
-    if (isNaN(combined.getTime())) {
-      setBannerNotice({ type: 'error', text: 'Invalid date/time combination.' });
+    const isoUtc = kolkataToUTC(scheduledDate, scheduledTime);
+    if (!isoUtc) {
+      setBannerNotice({ type: 'error', text: 'Invalid date or time format for Asia/Kolkata timezone.' });
       return;
     }
-    executeCommand({ type: 'SET_SCHEDULE', scheduledAt: combined.toISOString() }, 'Schedule updated');
+    executeCommand({ type: 'SET_SCHEDULE', scheduledAt: isoUtc }, 'Schedule updated');
   };
 
   const handleClearSchedule = () => {
@@ -693,10 +696,10 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
 
               {/* Currently Configured Time Notice */}
               <div className="bg-stone-950/70 rounded-xl p-3 border border-stone-800/80 flex flex-col gap-1">
-                <span className="text-[11px] text-stone-400">Configured Visitor Time</span>
+                <span className="text-[11px] text-stone-400">Configured Visitor Time (Asia/Kolkata)</span>
                 <p className="text-xs text-cream-200 font-medium">
                   {session?.scheduledAt
-                    ? formatScheduledDate(session.scheduledAt)
+                    ? formatKolkataDate(session.scheduledAt)
                     : 'Immediate Access (No countdown configured)'}
                 </p>
                 {session?.scheduledAt && (

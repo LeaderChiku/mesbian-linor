@@ -2,16 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import FloralDivider from '@/components/ui/FloralDivider';
-import PolaroidCard from '@/components/ui/PolaroidCard';
-import StoryLetterCard from '@/components/story/StoryLetterCard';
-import StoryTimelineCard from '@/components/story/StoryTimelineCard';
 import AmbientAudioToggle from '@/components/ui/AmbientAudioToggle';
-import WaxSeal from '@/components/ui/WaxSeal';
-import EndingA from '@/components/story/endings/EndingA';
-import EndingB from '@/components/story/endings/EndingB';
-import EndingC from '@/components/story/endings/EndingC';
+import StoryTimelineCard from '@/components/story/StoryTimelineCard';
 import CategoryCollageModal from '@/components/story/collages/CategoryCollageModal';
+import ChapterPrologue from '@/components/story/chapters/ChapterPrologue';
+import ChapterOne from '@/components/story/chapters/ChapterOne';
+import ChapterTwo from '@/components/story/chapters/ChapterTwo';
+import ChapterThree from '@/components/story/chapters/ChapterThree';
+import ChapterFour from '@/components/story/chapters/ChapterFour';
+import LockedChapterGate from '@/components/story/chapters/LockedChapterGate';
 import { clearSession } from '@/lib/session';
 import { getCmsValue } from '@/lib/cms';
 import { type CategorySlug } from '@/lib/photos';
@@ -20,6 +19,7 @@ interface WelcomeSectionProps {
   storyTitle: string;
   cmsData?: Record<string, string>;
   activeSectionIndex?: number;
+  unlockedChapterIndex?: number;
   selectedEnding?: string | null;
   onLock?: () => void;
   onExit?: () => void;
@@ -43,12 +43,18 @@ const itemVariants = {
 export default function WelcomeSection({
   storyTitle,
   cmsData,
-  activeSectionIndex,
+  activeSectionIndex = 0,
+  unlockedChapterIndex,
   selectedEnding,
   onLock,
   onExit,
 }: WelcomeSectionProps) {
   const [activeCategory, setActiveCategory] = useState<CategorySlug | null>(null);
+
+  // Authoritative unlocked chapter boundary (0 = Prologue only, 1 = Ch 1, 2 = Ch 2, 3 = Ch 3, 4 = Ch 4)
+  const unlockedIdx = typeof unlockedChapterIndex === 'number'
+    ? unlockedChapterIndex
+    : (activeSectionIndex ?? 0);
 
   // Smoothly scroll visitor phone to the section navigated by Admin
   useEffect(() => {
@@ -79,6 +85,10 @@ export default function WelcomeSection({
     }
   }
 
+  const scrollToSection = (id: string) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
   // Retrieve CMS values with default fallbacks
   const heroDedication = getCmsValue(cmsData, 'heroDedication');
   const heroHeading = getCmsValue(cmsData, 'heroTitle') || storyTitle;
@@ -100,6 +110,21 @@ export default function WelcomeSection({
   const catWorldDesc = getCmsValue(cmsData, 'catOurWorldDesc');
   const catFoldedTitle = getCmsValue(cmsData, 'catFoldedWhispersTitle');
   const catFoldedDesc = getCmsValue(cmsData, 'catFoldedWhispersDesc');
+
+  const endingATitle = getCmsValue(cmsData, 'endingATitle');
+  const endingAWish = getCmsValue(cmsData, 'endingAWish');
+  const endingBTitle = getCmsValue(cmsData, 'endingBTitle');
+  const endingBWish = getCmsValue(cmsData, 'endingBWish');
+  const endingCTitle = getCmsValue(cmsData, 'endingCTitle');
+  const endingCWish = getCmsValue(cmsData, 'endingCWish');
+
+  const chaptersNav = [
+    { id: 'section-hero', number: 'Prologue', isUnlocked: true },
+    { id: 'section-polaroids', number: 'Ch I', isUnlocked: unlockedIdx >= 1 },
+    { id: 'section-letter', number: 'Ch II', isUnlocked: unlockedIdx >= 2 },
+    { id: 'section-timeline', number: 'Ch III', isUnlocked: unlockedIdx >= 3 },
+    { id: 'section-closing', number: 'Ch IV', isUnlocked: unlockedIdx >= 4 },
+  ];
 
   return (
     <>
@@ -124,254 +149,137 @@ export default function WelcomeSection({
         {/* Floating Ambient Music Controller */}
         <AmbientAudioToggle />
 
+        {/* Sticky Chapter Navigation Bar */}
+        <nav
+          aria-label="Story chapter progress"
+          className="sticky top-4 z-40 mb-6 px-3 py-1.5 rounded-full bg-white/80 border border-stone-200/90 shadow-sm backdrop-blur-md flex items-center gap-1 sm:gap-2 text-[11px] font-sans"
+        >
+          {chaptersNav.map((ch, idx) => (
+            <button
+              key={ch.id}
+              onClick={() => ch.isUnlocked && scrollToSection(ch.id)}
+              disabled={!ch.isUnlocked}
+              className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1 ${
+                ch.isUnlocked
+                  ? 'text-stone-700 hover:text-pistachio-800 hover:bg-pistachio-50 font-medium cursor-pointer'
+                  : 'text-stone-400 opacity-60 cursor-not-allowed'
+              }`}
+            >
+              <span>{ch.isUnlocked ? '✓' : '🔒'}</span>
+              <span>{ch.number}</span>
+            </button>
+          ))}
+        </nav>
+
         <motion.div
           className="relative z-10 w-full max-w-2xl flex flex-col gap-12 sm:gap-16 mx-auto"
           variants={containerVariants}
           initial="hidden"
           animate="visible"
         >
-          {/* ── 1. Story Hero Header ── */}
-          <motion.header
-            id="section-hero"
-            variants={itemVariants}
-            className="flex flex-col items-center gap-4 text-center pt-2 sm:pt-4 scroll-mt-8"
-          >
-            {/* Botanical Crest */}
-            <div className="flex items-center gap-3" aria-hidden>
-              <span className="text-2xl">🌿</span>
-              <span className="font-sans text-[11px] uppercase tracking-[0.3em] text-pistachio-600 font-semibold">
-                {heroDedication}
-              </span>
-              <span className="text-2xl">🌿</span>
-            </div>
+          {/* ── 1. Prologue: A Story for You (Always Unlocked) ── */}
+          <motion.div id="section-hero" variants={itemVariants}>
+            <ChapterPrologue
+              dedication={heroDedication}
+              title={heroHeading}
+              welcomeText={heroWelcome}
+            />
+          </motion.div>
 
-            <h1 className="font-script text-4xl sm:text-6xl text-pistachio-800 leading-tight">
-              {heroHeading}
-            </h1>
+          {/* ── 2. Chapter I: Treasured Moments ── */}
+          <motion.div id="section-polaroids" variants={itemVariants}>
+            {unlockedIdx >= 1 ? (
+              <ChapterOne
+                onSelectCategory={setActiveCategory}
+                goldenTitle={catGoldenTitle}
+                goldenDesc={catGoldenDesc}
+                lateTitle={catLateTitle}
+                lateDesc={catLateDesc}
+                worldTitle={catWorldTitle}
+                worldDesc={catWorldDesc}
+                foldedTitle={catFoldedTitle}
+                foldedDesc={catFoldedDesc}
+              />
+            ) : (
+              <LockedChapterGate
+                chapterNumber="Chapter I"
+                chapterTitle="Treasured Moments"
+                chapterSubtitle="Golden light and captured whispers"
+              />
+            )}
+          </motion.div>
 
-            <p className="font-serif text-stone-600 text-sm sm:text-base leading-relaxed max-w-md mx-auto">
-              {heroWelcome}
-            </p>
+          {/* ── 3. Chapter II: The Letter ── */}
+          <motion.div id="section-letter" variants={itemVariants}>
+            {unlockedIdx >= 2 ? (
+              <ChapterTwo
+                title={letterTitle}
+                date={letterDate}
+                salutation={letterSalutation}
+                paragraphs={[letterP1, letterP2, letterP3]}
+                signature={letterSignature}
+              />
+            ) : (
+              <LockedChapterGate
+                chapterNumber="Chapter II"
+                chapterTitle="The Letter"
+                chapterSubtitle="Words kept close to the chest"
+              />
+            )}
+          </motion.div>
 
-            <FloralDivider className="w-full max-w-sm mt-2 opacity-80" />
-          </motion.header>
+          {/* ── 4. Chapter III: The Journey Map ── */}
+          <motion.div id="section-timeline" variants={itemVariants}>
+            {unlockedIdx >= 3 ? (
+              <ChapterThree />
+            ) : (
+              <LockedChapterGate
+                chapterNumber="Chapter III"
+                chapterTitle="The Journey Map"
+                chapterSubtitle="How every step brought us here"
+              />
+            )}
+          </motion.div>
 
-          {/* ── 2. Polaroid Scrapbook Gallery (Interactive Categories) ── */}
-          <motion.section
-            id="section-polaroids"
-            variants={itemVariants}
-            className="flex flex-col items-center gap-6 scroll-mt-10"
-          >
-            <div className="text-center flex flex-col items-center gap-1">
-              <span className="font-sans text-[11px] tracking-[0.25em] uppercase text-stone-400 font-medium">
-                Treasured Moments
-              </span>
-              <span className="text-xs font-serif text-pistachio-700 italic">
-                (Tap any polaroid to open its photo album)
-              </span>
-            </div>
+          {/* ── 5. Chapter IV: A Promise for Tomorrow / Endings ── */}
+          <motion.div id="section-closing" variants={itemVariants}>
+            {unlockedIdx >= 4 ? (
+              <ChapterFour
+                selectedEnding={selectedEnding}
+                endingATitle={endingATitle}
+                endingAWish={endingAWish}
+                endingBTitle={endingBTitle}
+                endingBWish={endingBWish}
+                endingCTitle={endingCTitle}
+                endingCWish={endingCWish}
+                onLock={handleLockStory}
+                onExit={onExit}
+              />
+            ) : (
+              <LockedChapterGate
+                chapterNumber="Chapter IV"
+                chapterTitle="A Promise for Tomorrow"
+                chapterSubtitle="Until the next page is written"
+              />
+            )}
+          </motion.div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-7 sm:gap-8 w-full max-w-lg mx-auto">
-              {/* Category 1: The Golden Hour */}
-              <div
-                onClick={() => setActiveCategory('the-golden-hour')}
-                className="cursor-pointer transition-transform hover:scale-[1.03] active:scale-[0.98]"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setActiveCategory('the-golden-hour')}
-                aria-label="Open The Golden Hour photo album"
-              >
-                <PolaroidCard
-                  rotate={-2.5}
-                  tape="pistachio"
-                  tapePosition="top-left"
-                  caption={catGoldenTitle}
-                  date="Day One"
-                >
-                  <div className="w-full h-full bg-gradient-to-br from-amber-100 via-pistachio-50 to-cream-300 flex flex-col items-center justify-center p-6 text-center select-none">
-                    <span className="text-4xl mb-2 drop-shadow-sm" aria-hidden>🌅</span>
-                    <span className="font-script text-stone-700 text-base leading-snug">
-                      {catGoldenDesc}
-                    </span>
-                    <span className="font-sans text-[10px] text-pistachio-700 mt-2 font-semibold uppercase tracking-wider flex items-center gap-1">
-                      <span>View Album</span>
-                      <span>↗</span>
-                    </span>
-                  </div>
-                </PolaroidCard>
-              </div>
-
-              {/* Category 2: Late Night Queues */}
-              <div
-                onClick={() => setActiveCategory('late-night-queues')}
-                className="cursor-pointer transition-transform hover:scale-[1.03] active:scale-[0.98]"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setActiveCategory('late-night-queues')}
-                aria-label="Open Late Night Queues photo album"
-              >
-                <PolaroidCard
-                  rotate={2}
-                  tape="blush"
-                  tapePosition="top-right"
-                  caption={catLateTitle}
-                  date="Valorant Memories"
-                >
-                  <div className="w-full h-full bg-gradient-to-br from-rose-100 via-blush-50 to-cream-300 flex flex-col items-center justify-center p-6 text-center select-none">
-                    <span className="text-4xl mb-2 drop-shadow-sm" aria-hidden>🎮</span>
-                    <span className="font-script text-stone-700 text-base leading-snug">
-                      {catLateDesc}
-                    </span>
-                    <span className="font-sans text-[10px] text-blush-700 mt-2 font-semibold uppercase tracking-wider flex items-center gap-1">
-                      <span>View Album</span>
-                      <span>↗</span>
-                    </span>
-                  </div>
-                </PolaroidCard>
-              </div>
-
-              {/* Category 3: Our Little World */}
-              <div
-                onClick={() => setActiveCategory('our-little-world')}
-                className="cursor-pointer transition-transform hover:scale-[1.03] active:scale-[0.98]"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setActiveCategory('our-little-world')}
-                aria-label="Open Our Little World photo album"
-              >
-                <PolaroidCard
-                  rotate={1.5}
-                  tape="pistachio"
-                  tapePosition="top-right"
-                  caption={catWorldTitle}
-                  date="Minecraft & Inside Jokes"
-                >
-                  <div className="w-full h-full bg-gradient-to-br from-pistachio-100 via-cream-100 to-cream-200 flex flex-col items-center justify-center p-6 text-center select-none">
-                    <span className="text-4xl mb-2 drop-shadow-sm" aria-hidden>🌱</span>
-                    <span className="font-script text-stone-700 text-base leading-snug">
-                      {catWorldDesc}
-                    </span>
-                    <span className="font-sans text-[10px] text-pistachio-700 mt-2 font-semibold uppercase tracking-wider flex items-center gap-1">
-                      <span>View Album</span>
-                      <span>↗</span>
-                    </span>
-                  </div>
-                </PolaroidCard>
-              </div>
-
-              {/* Category 4: Folded Whispers */}
-              <div
-                onClick={() => setActiveCategory('folded-whispers')}
-                className="cursor-pointer transition-transform hover:scale-[1.03] active:scale-[0.98]"
-                role="button"
-                tabIndex={0}
-                onKeyDown={(e) => e.key === 'Enter' && setActiveCategory('folded-whispers')}
-                aria-label="Open Folded Whispers photo album"
-              >
-                <PolaroidCard
-                  rotate={-1.8}
-                  tape="blush"
-                  tapePosition="top-left"
-                  caption={catFoldedTitle}
-                  date="Kept Forever"
-                >
-                  <div className="w-full h-full bg-gradient-to-br from-cream-300 via-blush-50 to-stone-200 flex flex-col items-center justify-center p-6 text-center select-none">
-                    <span className="text-4xl mb-2 drop-shadow-sm" aria-hidden>💌</span>
-                    <span className="font-script text-stone-700 text-base leading-snug">
-                      {catFoldedDesc}
-                    </span>
-                    <span className="font-sans text-[10px] text-blush-700 mt-2 font-semibold uppercase tracking-wider flex items-center gap-1">
-                      <span>View Album</span>
-                      <span>↗</span>
-                    </span>
-                  </div>
-                </PolaroidCard>
-              </div>
-            </div>
-          </motion.section>
-
-          {/* ── 3. Narrative Letter Section (Customizable via CMS) ── */}
-          <motion.section id="section-letter" variants={itemVariants} className="scroll-mt-10">
-            <StoryLetterCard
-              title={letterTitle}
-              date={letterDate}
-              salutation={letterSalutation}
-              paragraphs={[letterP1, letterP2, letterP3]}
-              signature={letterSignature}
-              waxSealInitials="M&L"
+          {/* ── Interactive Chapters Roadmap & Ready to Begin ── */}
+          <motion.section variants={itemVariants} className="pt-2">
+            <StoryTimelineCard
+              unlockedIndex={unlockedIdx}
+              onSelectChapter={(idx) => {
+                const sectionIds = [
+                  'section-hero',
+                  'section-polaroids',
+                  'section-letter',
+                  'section-timeline',
+                  'section-closing',
+                ];
+                if (sectionIds[idx]) scrollToSection(sectionIds[idx]);
+              }}
             />
           </motion.section>
-
-          {/* ── 4. Interactive Chapters Roadmap ── */}
-          <motion.section id="section-timeline" variants={itemVariants} className="pt-2 scroll-mt-10">
-            <StoryTimelineCard />
-          </motion.section>
-
-          {/* ── 5. Story Closing / Selected Ending ── */}
-          <motion.footer
-            id="section-closing"
-            variants={itemVariants}
-            className="flex flex-col items-center gap-5 pt-8 pb-12 text-center scroll-mt-10"
-          >
-            <FloralDivider className="w-full max-w-sm opacity-60" />
-
-            {/* Ending panel — rendered only when admin has selected an ending */}
-            {selectedEnding === 'ending-a' && (
-              <div className="w-full text-left">
-                <EndingA
-                  title={getCmsValue(cmsData, 'endingATitle')}
-                  wish={getCmsValue(cmsData, 'endingAWish')}
-                />
-              </div>
-            )}
-            {selectedEnding === 'ending-b' && (
-              <div className="w-full text-left">
-                <EndingB
-                  title={getCmsValue(cmsData, 'endingBTitle')}
-                  wish={getCmsValue(cmsData, 'endingBWish')}
-                />
-              </div>
-            )}
-            {selectedEnding === 'ending-c' && (
-              <div className="w-full text-left">
-                <EndingC
-                  title={getCmsValue(cmsData, 'endingCTitle')}
-                  wish={getCmsValue(cmsData, 'endingCWish')}
-                />
-              </div>
-            )}
-
-            {/* Default closing — shown when no ending is selected yet */}
-            {!selectedEnding && (
-              <>
-                <WaxSeal initials="M&L" size={56} color="pistachio" />
-                <p className="font-script text-2xl text-pistachio-800">
-                  made with all our love ♡
-                </p>
-                <p className="font-serif text-xs text-stone-500 max-w-xs leading-relaxed">
-                  Your progress is securely saved. You can return anytime on your phone or laptop.
-                </p>
-              </>
-            )}
-
-            {/* Visitor action buttons */}
-            <div className="flex items-center gap-4 mt-2">
-              <button
-                onClick={handleLockStory}
-                className="text-[11px] font-sans tracking-widest uppercase text-stone-400 hover:text-stone-700 underline underline-offset-4 transition-colors"
-              >
-                🔒 Lock Story
-              </button>
-              {onExit && (
-                <button
-                  onClick={onExit}
-                  className="text-[11px] font-sans tracking-widest uppercase text-stone-400 hover:text-stone-700 underline underline-offset-4 transition-colors"
-                >
-                  🚪 Leave Story
-                </button>
-              )}
-            </div>
-          </motion.footer>
         </motion.div>
       </motion.div>
 

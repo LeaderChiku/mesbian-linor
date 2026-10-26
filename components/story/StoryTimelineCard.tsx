@@ -14,6 +14,8 @@ export interface StoryChapter {
 
 interface StoryTimelineProps {
   chapters?: StoryChapter[];
+  unlockedIndex?: number;
+  onSelectChapter?: (index: number) => void;
 }
 
 const defaultChapters: StoryChapter[] = [
@@ -61,9 +63,41 @@ const defaultChapters: StoryChapter[] = [
 
 export default function StoryTimelineCard({
   chapters = defaultChapters,
+  unlockedIndex = 0,
+  onSelectChapter,
 }: StoryTimelineProps) {
   const [readyStatus, setReadyStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [lockedNotice, setLockedNotice] = useState<string | null>(null);
+
+  // Compute unlock state based on authoritative unlockedIndex
+  const computedChapters = chapters.map((ch, idx) => ({
+    ...ch,
+    isUnlocked: idx <= unlockedIndex,
+  }));
+
+  const handleChapterClick = (index: number, isUnlocked: boolean, title: string) => {
+    if (!isUnlocked) {
+      setLockedNotice(`🔒 ${title} is currently sealed. When the storyteller clicks "Next Section", it will unlock automatically!`);
+      setTimeout(() => setLockedNotice(null), 4000);
+      return;
+    }
+    if (onSelectChapter) {
+      onSelectChapter(index);
+    } else {
+      const sectionIds = [
+        'section-hero',
+        'section-polaroids',
+        'section-letter',
+        'section-timeline',
+        'section-closing',
+      ];
+      const targetId = sectionIds[index];
+      if (targetId) {
+        document.getElementById(targetId)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
+  };
 
   const handleReadyToBegin = async () => {
     if (readyStatus === 'sending' || readyStatus === 'sent') return;
@@ -142,10 +176,20 @@ export default function StoryTimelineCard({
             {errorMessage}
           </p>
         )}
+
+        {lockedNotice && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-xs font-medium max-w-sm"
+          >
+            {lockedNotice}
+          </motion.div>
+        )}
       </div>
 
       <div className="relative pl-6 sm:pl-8 border-l-2 border-pistachio-200/80 flex flex-col gap-8 ml-3 sm:ml-4">
-        {chapters.map((chapter) => (
+        {computedChapters.map((chapter, idx) => (
           <div key={chapter.id} className="relative group">
             {/* Timeline bullet / node */}
             <div
@@ -163,12 +207,13 @@ export default function StoryTimelineCard({
 
             {/* Chapter Card */}
             <div
+              onClick={() => handleChapterClick(idx, chapter.isUnlocked, chapter.title)}
               className={`
-                p-5 rounded-2xl border transition-all duration-300
+                p-5 rounded-2xl border transition-all duration-300 cursor-pointer
                 ${
                   chapter.isUnlocked
-                    ? 'bg-white shadow-card border-stone-200/70 hover:border-pistachio-300'
-                    : 'bg-cream-100/70 border-dashed border-stone-300/80 opacity-75'
+                    ? 'bg-white shadow-card border-stone-200/70 hover:border-pistachio-400 hover:shadow-md'
+                    : 'bg-cream-100/70 border-dashed border-stone-300/80 opacity-75 hover:border-stone-400'
                 }
               `}
             >
@@ -176,11 +221,17 @@ export default function StoryTimelineCard({
                 <span className="font-script text-lg text-pistachio-700">
                   {chapter.number}
                 </span>
-                {chapter.date && (
-                  <span className="font-sans text-[10px] uppercase tracking-wider text-stone-400 font-medium">
-                    {chapter.date}
-                  </span>
-                )}
+                <span className="font-sans text-[10px] uppercase tracking-wider font-medium px-2 py-0.5 rounded-full flex items-center gap-1">
+                  {chapter.isUnlocked ? (
+                    <span className="text-pistachio-700 bg-pistachio-100/80 px-2 py-0.5 rounded-full">
+                      ✓ Unlocked
+                    </span>
+                  ) : (
+                    <span className="text-stone-500 bg-stone-200/80 px-2 py-0.5 rounded-full">
+                      🔒 Sealed
+                    </span>
+                  )}
+                </span>
               </div>
 
               <h4 className="font-display text-lg text-stone-800 mb-1">

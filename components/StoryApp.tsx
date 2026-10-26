@@ -360,6 +360,7 @@ export default function StoryApp() {
               storyTitle={storyTitle}
               cmsData={session?.cmsData}
               activeSectionIndex={session?.currentSectionIndex ?? 0}
+              unlockedChapterIndex={session?.unlockedChapterIndex ?? session?.currentSectionIndex ?? 0}
               selectedEnding={session?.selectedEnding ?? null}
               onLock={handleLockStory}
               onExit={handleLockStory}

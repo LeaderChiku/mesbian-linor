@@ -5,11 +5,12 @@
   "sessionStatus": "scheduled",
   "currentSectionId": "hero",
   "currentSectionIndex": 0,
+  "unlockedChapterIndex": 0,
   "totalSections": 5,
   "selectedEnding": null,
   "isBlackScreen": false,
   "isTwistActive": false,
-  "readyToBeginAt": "2026-10-25T05:36:01.140Z",
+  "readyToBeginAt": "2026-10-25T10:37:09.434Z",
   "notifications": [],
   "cmsData": {
     "heroTitle": "Preserved Value",
@@ -23,7 +24,7 @@
   "audioState": "ready",
   "audioType": "music",
   "audioVolume": 65,
-  "commandSeq": 747,
-  "lastCommand": "SET_SCHEDULE",
-  "updatedAt": "2026-10-25T05:36:03.031Z"
+  "commandSeq": 1047,
+  "lastCommand": "NAVIGATE_TO_0",
+  "updatedAt": "2026-10-25T10:37:16.581Z"
 }

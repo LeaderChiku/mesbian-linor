@@ -53,7 +53,17 @@ export async function POST(req: NextRequest) {
     }
 
     if (action.type === 'SET_SCHEDULE') {
-      await syncSessionWithSupabase(result.state);
+      const syncOk = await syncSessionWithSupabase(result.state);
+      const isCloudConfigured = Boolean(
+        process.env.SUPABASE_URL ||
+        process.env.NEXT_PUBLIC_SUPABASE_URL
+      );
+      if (isCloudConfigured && !syncOk) {
+        return NextResponse.json({
+          error: 'Failed to write schedule to persistent database. Check Supabase connection and table RLS permissions.',
+          state: result.state,
+        }, { status: 500 });
+      }
     }
 
     return NextResponse.json({

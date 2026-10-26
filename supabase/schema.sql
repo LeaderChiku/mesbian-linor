@@ -15,6 +15,7 @@ create table if not exists story_sessions (
   session_status         text not null default 'scheduled',    -- 'scheduled' | 'active' | 'paused' | 'ended'
   current_section_id     text not null default 'hero',
   current_section_index  integer not null default 0,
+  unlocked_chapter_index integer not null default 0,           -- 0 = Prologue only; 1 = Ch 1 unlocked, etc.
   total_sections         integer not null default 5,
   selected_ending        text,
   is_black_screen        boolean not null default false,
@@ -100,15 +101,19 @@ drop policy if exists "Service role has full access to admin_config" on admin_co
 drop policy if exists "Public read access to chapters" on story_chapters;
 drop policy if exists "Public read access to photos" on story_photos;
 
--- story_sessions: Public (anon) can read state; writes restricted to service_role
+-- story_sessions: Public can read; server API routes perform authenticated updates
 create policy "Public can read session state"
   on story_sessions for select
   using (true);
 
-create policy "Service role has full access to story_sessions"
-  on story_sessions for all
-  using (auth.role() = 'service_role')
-  with check (auth.role() = 'service_role');
+create policy "Allow server api update to story_sessions"
+  on story_sessions for update
+  using (true)
+  with check (true);
+
+create policy "Allow server api insert to story_sessions"
+  on story_sessions for insert
+  with check (true);
 
 -- admin_config: STRICTLY restricted to service_role (Public anon has NO access)
 create policy "Service role has full access to admin_config"

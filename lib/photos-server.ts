@@ -191,3 +191,113 @@ export async function deletePhoto(id: string): Promise<boolean> {
 
   return true;
 }
+
+const ALLOWED_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+  'image/avif',
+]);
+
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.avif']);
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit
+
+/**
+ * Handle direct photo file upload from admin laptop.
+ * Uploads to Supabase Storage bucket 'photos' or local fallback.
+ */
+export async function uploadPhotoFile(
+  file: File,
+  categorySlug: CategorySlug,
+  customCaption?: string
+): Promise<{ success: boolean; photo?: PhotoItem; error?: string }> {
+  const ext = path.extname(file.name).toLowerCase();
+  if (!ALLOWED_EXTENSIONS.has(ext) && !ALLOWED_MIME_TYPES.has(file.type)) {
+    return {
+      success: false,
+      error: `Unsupported format (${file.type || ext}). Allowed: JPG, PNG, WebP, AVIF.`,
+    };
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      success: false,
+      error: `File size exceeds 10MB limit (${(file.size / (1024 * 1024)).toFixed(1)}MB).`,
+    };
+  }
+
+  const cleanExt = ext || (file.type === 'image/png' ? '.png' : file.type === 'image/webp' ? '.webp' : '.jpg');
+  const safeBaseName = path
+    .basename(file.name, ext)
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .slice(0, 30);
+  const uniqueKey = `${categorySlug}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safeBaseName}${cleanExt}`;
+  const defaultCaption = customCaption?.trim() || safeBaseName.replace(/_/g, ' ') || 'Untitled Photo';
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const supabase = getSupabaseServerClient();
+
+  let finalUrl = '';
+
+  // 1. Prefer Supabase Storage bucket 'photos'
+  if (supabase) {
+    try {
+      const { data: uploadData, error: uploadErr } = await supabase.storage
+        .from('photos')
+        .upload(uniqueKey, buffer, {
+          contentType: file.type || 'image/jpeg',
+          upsert: true,
+        });
+
+      if (!uploadErr && uploadData) {
+        const { data: urlData } = supabase.storage.from('photos').getPublicUrl(uniqueKey);
+        if (urlData?.publicUrl) {
+          finalUrl = urlData.publicUrl;
+        }
+      } else if (uploadErr) {
+        console.warn('[supabase storage warning]:', uploadErr.message);
+      }
+    } catch (storageErr) {
+      console.warn('[supabase storage exception]:', storageErr);
+    }
+  }
+
+  // 2. Local filesystem fallback for dev / offline testing
+  if (!finalUrl) {
+    try {
+      const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'photos', categorySlug);
+      if (!fs.existsSync(uploadsDir)) {
+        fs.mkdirSync(uploadsDir, { recursive: true });
+      }
+      const localFilePath = path.join(uploadsDir, path.basename(uniqueKey));
+      fs.writeFileSync(localFilePath, buffer);
+      finalUrl = `/uploads/photos/${categorySlug}/${path.basename(uniqueKey)}`;
+    } catch (fsErr) {
+      console.warn('[local file write fallback error]:', fsErr);
+    }
+  }
+
+  if (!finalUrl) {
+    return {
+      success: false,
+      error: 'Storage failure: Supabase bucket "photos" not found and filesystem is read-only. Please create bucket "photos" in Supabase Storage.',
+    };
+  }
+
+  const existingPhotos = await getPhotosByCategory(categorySlug);
+  const newPhoto = await addPhoto({
+    imageUrl: finalUrl,
+    caption: defaultCaption,
+    categorySlug,
+    orderIndex: existingPhotos.length,
+    isCover: existingPhotos.length === 0,
+    dateLabel: new Intl.DateTimeFormat('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      month: 'short',
+      year: 'numeric',
+    }).format(new Date()),
+  });
+
+  return { success: true, photo: newPhoto };
+}

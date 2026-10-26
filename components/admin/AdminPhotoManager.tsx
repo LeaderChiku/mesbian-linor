@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   type CategorySlug,
   type PhotoItem,
@@ -14,7 +14,16 @@ export default function AdminPhotoManager() {
   const [actionLoading, setActionLoading] = useState(false);
   const [notice, setNotice] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Form state for adding photo
+  // File upload state
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgressText, setUploadProgressText] = useState('');
+  const [uploadFeedback, setUploadFeedback] = useState<{
+    successCount: number;
+    failedItems: { filename: string; error: string }[];
+  } | null>(null);
+
+  // Form state for adding photo via URL
   const [newImageUrl, setNewImageUrl] = useState('');
   const [newCaption, setNewCaption] = useState('');
   const [newComments, setNewComments] = useState('');
@@ -39,6 +48,60 @@ export default function AdminPhotoManager() {
   useEffect(() => {
     fetchPhotos();
   }, [fetchPhotos]);
+
+  const handleFilesSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+
+    const filesToUpload = Array.from(fileList);
+    setUploading(true);
+    setActionLoading(true);
+    setUploadFeedback(null);
+    setUploadProgressText(`Uploading ${filesToUpload.length} photo(s)...`);
+
+    try {
+      const formData = new FormData();
+      formData.append('categorySlug', selectedCategory);
+      for (const file of filesToUpload) {
+        formData.append('files', file);
+      }
+
+      const res = await fetch('/api/admin/photos/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        const successCount = data.uploaded?.length || 0;
+        const failedItems = data.failed || [];
+        setUploadFeedback({ successCount, failedItems });
+        if (successCount > 0) {
+          setNotice({
+            type: 'success',
+            text: `Successfully uploaded ${successCount} photo(s) to "${selectedCategory}".`,
+          });
+          fetchPhotos();
+        } else if (failedItems.length > 0) {
+          setNotice({
+            type: 'error',
+            text: `Failed to upload: ${failedItems[0].error}`,
+          });
+        }
+      } else {
+        setNotice({ type: 'error', text: data.error || 'Failed to upload photos' });
+      }
+    } catch {
+      setNotice({ type: 'error', text: 'Network error uploading photos' });
+    } finally {
+      setUploading(false);
+      setActionLoading(false);
+      setUploadProgressText('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleAddPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,81 +318,170 @@ export default function AdminPhotoManager() {
           )}
         </div>
 
-        {/* ── Add Photo Form (5 cols) ── */}
-        <div className="lg:col-span-5 bg-stone-950/80 border border-stone-800 rounded-xl p-5 flex flex-col gap-4">
-          <h3 className="font-serif text-base text-cream-100 flex items-center gap-2">
-            <span>➕</span>
-            <span>Add Photo to Category</span>
-          </h3>
-
-          <form onSubmit={handleAddPhoto} className="flex flex-col gap-3.5">
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] text-stone-400">Image URL or Local Path</label>
-              <input
-                type="text"
-                placeholder="/photos/sunset.jpg or https://..."
-                value={newImageUrl}
-                onChange={(e) => setNewImageUrl(e.target.value)}
-                required
-                className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
-              />
+        {/* ── Add & Upload Photos (5 cols) ── */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+          {/* Direct File Upload Card */}
+          <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-5 flex flex-col gap-3.5">
+            <div className="flex items-center justify-between">
+              <h3 className="font-serif text-base text-cream-100 flex items-center gap-2">
+                <span>💻</span>
+                <span>Upload Photos from Laptop</span>
+              </h3>
+              <span className="text-[10px] font-mono bg-stone-900 text-pistachio-400 px-2 py-0.5 rounded border border-stone-800">
+                Direct Upload
+              </span>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] text-stone-400">Handwritten Caption</label>
-              <input
-                type="text"
-                placeholder="e.g. Where our story quietly began"
-                value={newCaption}
-                onChange={(e) => setNewCaption(e.target.value)}
-                required
-                className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
-              />
-            </div>
+            <p className="text-[11px] text-stone-400 leading-relaxed">
+              Select one or multiple photos to upload directly into{' '}
+              <strong className="text-cream-200">
+                {PHOTO_CATEGORIES.find((c) => c.slug === selectedCategory)?.title}
+              </strong>
+              . Supported formats: JPG, PNG, WebP, AVIF (up to 10MB each).
+            </p>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] text-stone-400">Sticky Note Comment (Optional)</label>
-              <textarea
-                rows={2}
-                placeholder="e.g. That first warm afternoon when time slowed down"
-                value={newComments}
-                onChange={(e) => setNewComments(e.target.value)}
-                className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
-              />
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept=".jpg,.jpeg,.png,.webp,.avif,image/jpeg,image/png,image/webp,image/avif"
+              onChange={handleFilesSelected}
+              disabled={uploading || actionLoading}
+              className="hidden"
+            />
 
-            <div className="flex flex-col gap-1">
-              <label className="text-[11px] text-stone-400">Date Stamp / Label (Optional)</label>
-              <input
-                type="text"
-                placeholder="e.g. Day One or October 2026"
-                value={newDateLabel}
-                onChange={(e) => setNewDateLabel(e.target.value)}
-                className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
-              />
-            </div>
-
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="isCoverCheckbox"
-                checked={newIsCover}
-                onChange={(e) => setNewIsCover(e.target.checked)}
-                className="accent-pistachio-500 rounded"
-              />
-              <label htmlFor="isCoverCheckbox" className="text-xs text-stone-300 cursor-pointer">
-                Set as album cover photo
-              </label>
+            <div
+              onClick={() => {
+                if (!uploading && !actionLoading) {
+                  fileInputRef.current?.click();
+                }
+              }}
+              className={`border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-2 ${
+                uploading
+                  ? 'border-pistachio-500/50 bg-pistachio-950/20 cursor-wait'
+                  : 'border-stone-800 hover:border-pistachio-500/60 bg-stone-900/50 hover:bg-stone-900/80'
+              }`}
+            >
+              <span className="text-3xl">{uploading ? '⏳' : '📁'}</span>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-xs font-medium text-cream-200">
+                  {uploading ? uploadProgressText || 'Uploading...' : 'Click to Browse Files from Laptop'}
+                </span>
+                <span className="text-[10px] text-stone-500">
+                  Select single or multiple photos from file dialog
+                </span>
+              </div>
             </div>
 
             <button
-              type="submit"
-              disabled={actionLoading}
-              className="mt-2 py-2.5 rounded-lg bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 text-xs font-semibold uppercase tracking-wider transition-colors shadow-md disabled:opacity-50"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || actionLoading}
+              className="w-full py-2.5 rounded-lg bg-pistachio-600 hover:bg-pistachio-500 text-stone-950 text-xs font-semibold uppercase tracking-wider transition-colors shadow-md disabled:opacity-50 flex items-center justify-center gap-2"
             >
-              {actionLoading ? 'Adding...' : 'Add to Album'}
+              <span>{uploading ? '⏳' : '📤'}</span>
+              <span>{uploading ? 'Uploading...' : 'Choose Photos to Upload'}</span>
             </button>
-          </form>
+
+            {uploadFeedback && (
+              <div className="text-[11px] flex flex-col gap-1 p-2.5 rounded-lg bg-stone-900 border border-stone-800">
+                {uploadFeedback.successCount > 0 && (
+                  <span className="text-pistachio-400 font-medium">
+                    ✓ Successfully uploaded {uploadFeedback.successCount} photo(s).
+                  </span>
+                )}
+                {uploadFeedback.failedItems.length > 0 && (
+                  <div className="flex flex-col gap-0.5 text-blush-400">
+                    <span className="font-semibold">
+                      ⚠️ {uploadFeedback.failedItems.length} file(s) failed:
+                    </span>
+                    {uploadFeedback.failedItems.map((f, idx) => (
+                      <span key={idx} className="text-[10px] font-mono">
+                        • {f.filename}: {f.error}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Add via URL / Path Card */}
+          <div className="bg-stone-950/80 border border-stone-800 rounded-xl p-5 flex flex-col gap-4">
+            <h3 className="font-serif text-base text-cream-100 flex items-center gap-2">
+              <span>🔗</span>
+              <span>Or Add Photo by URL / Path</span>
+            </h3>
+
+            <form onSubmit={handleAddPhoto} className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-stone-400">Image URL or Local Path</label>
+                <input
+                  type="text"
+                  placeholder="/photos/sunset.jpg or https://..."
+                  value={newImageUrl}
+                  onChange={(e) => setNewImageUrl(e.target.value)}
+                  required
+                  className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-stone-400">Handwritten Caption</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Where our story quietly began"
+                  value={newCaption}
+                  onChange={(e) => setNewCaption(e.target.value)}
+                  required
+                  className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-stone-400">Sticky Note Comment (Optional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="e.g. That first warm afternoon when time slowed down"
+                  value={newComments}
+                  onChange={(e) => setNewComments(e.target.value)}
+                  className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-stone-400">Date Stamp / Label (Optional)</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Day One or October 2026"
+                  value={newDateLabel}
+                  onChange={(e) => setNewDateLabel(e.target.value)}
+                  className="bg-stone-900 border border-stone-800 text-xs text-cream-200 rounded-lg p-2.5 outline-none focus:border-pistachio-500"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="isCoverCheckbox"
+                  checked={newIsCover}
+                  onChange={(e) => setNewIsCover(e.target.checked)}
+                  className="accent-pistachio-500 rounded"
+                />
+                <label htmlFor="isCoverCheckbox" className="text-xs text-stone-300 cursor-pointer">
+                  Set as album cover photo
+                </label>
+              </div>
+
+              <button
+                type="submit"
+                disabled={actionLoading || uploading}
+                className="mt-2 py-2.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-cream-200 text-xs font-semibold uppercase tracking-wider transition-colors shadow-md disabled:opacity-50"
+              >
+                {actionLoading && !uploading ? 'Adding...' : 'Add by URL'}
+              </button>
+            </form>
+          </div>
         </div>
       </div>
     </section>

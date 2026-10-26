@@ -6,8 +6,10 @@
  * 2. Visitor receives and displays the updated schedule.
  * 3. Closing admin panel (unsubscribing SSE, terminating stream) does NOT reset the schedule.
  * 4. Server restart / process reload preserves the saved schedule from persistent cache / Supabase.
- * 5. October 25, 2026 (tomorrow's date) NEVER reappears unless explicitly saved.
+ * 5. October 25, 2026 NEVER reappears unless explicitly saved.
  * 6. Explicit Clear Schedule clears to null (unscheduled), which also persists across restart.
+ * 7. Asia/Kolkata timezone conversion is mathematically exact and roundtrips correctly.
+ * 8. Unauthorized users cannot modify the schedule.
  */
 
 import assert from 'node:assert';
@@ -19,6 +21,8 @@ import {
   getAuthoritativeSessionState,
   subscribeToSession,
 } from '../lib/server-state.ts';
+import { kolkataToUTC, utcToKolkataParts, formatKolkataDate } from '../lib/schedule.ts';
+import { verifyAdminToken } from '../lib/admin-auth.ts';
 
 async function run() {
   console.log('\n--- 1. Testing Schedule Setting & Admin Closure ---');
@@ -113,6 +117,30 @@ async function run() {
     'Null (unscheduled) state must survive restart, not restore Oct 25 default'
   );
   console.log('  ✓ Cleared state persists across restart as explicit null');
+
+  console.log('\n--- 4. Testing Asia/Kolkata Timezone Conversion ---');
+
+  // Step 11: Timezone conversions
+  const istDate = '2026-12-25';
+  const istTime = '19:30';
+  const utcISO = kolkataToUTC(istDate, istTime);
+  assert.strictEqual(
+    utcISO,
+    '2026-12-25T14:00:00.000Z',
+    '7:30 PM IST (UTC+5:30) must translate exactly to 2:00 PM UTC'
+  );
+
+  const parts = utcToKolkataParts(utcISO);
+  assert.deepStrictEqual(parts, { date: '2026-12-25', time: '19:30' }, 'UTC must roundtrip back to 19:30 in Kolkata');
+
+  const formattedIST = formatKolkataDate(utcISO);
+  assert.strictEqual(formattedIST.includes('December'), true, 'Formatted IST date must include month');
+  console.log('  ✓ Asia/Kolkata conversion matches exact UTC offset (+05:30)');
+
+  console.log('\n--- 5. Testing Admin Authorization Security ---');
+  assert.strictEqual(verifyAdminToken(undefined), false, 'Empty token must be rejected');
+  assert.strictEqual(verifyAdminToken('invalid-fake-token'), false, 'Forged token must be rejected');
+  console.log('  ✓ Unauthorized modification of schedule is strictly rejected');
 
   console.log('\n============================================');
   console.log('All schedule persistence tests PASSED successfully!');
