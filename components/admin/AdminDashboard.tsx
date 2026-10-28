@@ -18,8 +18,9 @@ import {
 import type { StorySessionState, NotificationItem } from '@/lib/server-state';
 import AdminCmsPanel from '@/components/admin/AdminCmsPanel';
 import AdminPhotoManager from '@/components/admin/AdminPhotoManager';
+import AdminAudioManager from '@/components/admin/AdminAudioManager';
 
-type AdminTab = 'control' | 'cms' | 'photos';
+type AdminTab = 'control' | 'cms' | 'photos' | 'audio';
 
 interface AdminDashboardProps {
   onLogout: () => void;
@@ -363,6 +364,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
           { id: 'control', label: '🎛️ Live Control', title: 'Session Control' },
           { id: 'cms', label: '✏️ Edit Content', title: 'CMS Editor' },
           { id: 'photos', label: '📷 Photo Albums', title: 'Photo Manager' },
+          { id: 'audio', label: '🎵 Audio Library', title: 'Audio Manager' },
         ] as const).map((tab) => (
           <button
             key={tab.id}
@@ -565,7 +567,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                 Live Session Overrides
               </span>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {/* Pause / Resume Session */}
                 <button
                   onClick={() =>
@@ -587,7 +589,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   `}
                 >
                   <span className="text-base">{session?.sessionStatus === 'paused' ? '▶' : '⏸'}</span>
-                  <span>{session?.sessionStatus === 'paused' ? 'Resume Session' : 'Pause Session'}</span>
+                  <span>{session?.sessionStatus === 'paused' ? 'Resume' : 'Pause'}</span>
                 </button>
 
                 {/* Black Screen Toggle */}
@@ -608,7 +610,28 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   `}
                 >
                   <span className="text-base">🌑</span>
-                  <span>{session?.isBlackScreen ? 'Screen: BLACK' : 'Black Screen'}</span>
+                  <span>{session?.isBlackScreen ? 'Screen: ON' : 'Black Screen'}</span>
+                </button>
+
+                {/* Dev Tools Visibility Toggle */}
+                <button
+                  onClick={() =>
+                    executeCommand(
+                      { type: 'SET_DEV_TOOLS', enabled: !session?.showDevTools },
+                      session?.showDevTools ? 'Hide Dev Tools' : 'Show Dev Tools'
+                    )
+                  }
+                  className={`
+                    p-3 rounded-xl border text-xs font-semibold uppercase tracking-wider flex flex-col items-center gap-1 text-center transition-all
+                    ${
+                      session?.showDevTools
+                        ? 'bg-amber-950/80 border-amber-600 text-amber-300'
+                        : 'bg-stone-800 hover:bg-stone-700 border-stone-700 text-stone-200'
+                    }
+                  `}
+                >
+                  <span className="text-base">⚙️</span>
+                  <span>{session?.showDevTools ? 'Dev Tools: ON' : 'Dev Tools: OFF'}</span>
                 </button>
 
                 {/* Exit Session (modal confirmation) */}
@@ -1035,6 +1058,13 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
       {activeTab === 'photos' && (
         <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
           <AdminPhotoManager />
+        </main>
+      )}
+
+      {/* ── Tab: Audio Library ── */}
+      {activeTab === 'audio' && (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
+          <AdminAudioManager />
         </main>
       )}
 

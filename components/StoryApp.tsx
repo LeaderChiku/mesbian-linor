@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useRealtimeSession } from '@/hooks/useRealtimeSession';
 import { useVisitorAudio } from '@/hooks/useVisitorAudio';
@@ -84,20 +84,37 @@ export default function StoryApp() {
 
   // ── P4.8 Romantic Twist Live State & Glass Shatter Animation ──
   const [isShattering, setIsShattering] = useState(false);
-  const [prevTwistActive, setPrevTwistActive] = useState<boolean | null>(null);
+  const initialMountRef = useRef(true);
+  const lastShatterSeqRef = useRef<number>(-1);
 
   useEffect(() => {
-    if (session?.isTwistActive === undefined) return;
-    if (prevTwistActive === null) {
-      setPrevTwistActive(session.isTwistActive);
+    if (!session) return;
+    if (initialMountRef.current) {
+      initialMountRef.current = false;
+      // If already active on initial mount, record current seq so we don't play shatter unexpectedly
+      if (session.isTwistActive) {
+        lastShatterSeqRef.current = session.commandSeq ?? 0;
+      }
       return;
     }
-    // Detect trigger transition from false -> true
-    if (!prevTwistActive && session.isTwistActive) {
+
+    if (!session.isTwistActive) {
+      return;
+    }
+
+    const currentSeq = session.commandSeq ?? 0;
+    if (currentSeq !== lastShatterSeqRef.current) {
+      lastShatterSeqRef.current = currentSeq;
       setIsShattering(true);
     }
-    setPrevTwistActive(session.isTwistActive);
-  }, [session?.isTwistActive, prevTwistActive]);
+  }, [session, session?.isTwistActive, session?.commandSeq]);
+
+  // ── Sync Dev Tools visibility with authoritative session state ──
+  useEffect(() => {
+    if (session?.showDevTools !== undefined) {
+      setShowDevTools(session.showDevTools);
+    }
+  }, [session?.showDevTools]);
 
   // ── P4.5 Black Screen Scroll-Lock & Touch-Lock ──
   useEffect(() => {

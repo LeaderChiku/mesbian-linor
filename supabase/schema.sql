@@ -19,6 +19,11 @@ create table if not exists story_sessions (
   total_sections         integer not null default 5,
   selected_ending        text,
   is_black_screen        boolean not null default false,
+  is_twist_active        boolean not null default false,       -- Phase 4 Romantic Twist
+  show_dev_tools         boolean not null default false,       -- Phase 5 DevTools visibility
+  ready_to_begin_at      timestamptz,
+  notifications          jsonb default '[]'::jsonb,
+  cms_data               jsonb default '{}'::jsonb,
   selected_audio_id      text default 'music-chimes',
   audio_command          text default 'none',                  -- 'play' | 'pause' | 'resume' | 'stop' | 'none'
   audio_state            text default 'ready',                 -- 'playing' | 'paused' | 'stopped' | 'ducked' | 'ready'
@@ -71,7 +76,20 @@ create table if not exists story_photos (
 
 create index if not exists idx_story_photos_chapter on story_photos (chapter_id, order_index);
 
--- 6. Auto-update updated_at timestamp trigger
+-- 6. Audio Tracks (Phase 5 Audio Library)
+create table if not exists audio_tracks (
+  id               text primary key,
+  title            text not null,
+  description      text,
+  storage_url      text not null,
+  duration_seconds integer,
+  order_index      integer not null default 0,
+  created_at       timestamptz not null default now()
+);
+
+create index if not exists idx_audio_tracks_order on audio_tracks (order_index);
+
+-- 7. Auto-update updated_at timestamp trigger
 create or replace function handle_updated_at()
 returns trigger language plpgsql as $$
 begin
@@ -93,6 +111,7 @@ alter table story_sessions enable row level security;
 alter table admin_config   enable row level security;
 alter table story_chapters enable row level security;
 alter table story_photos   enable row level security;
+alter table audio_tracks   enable row level security;
 
 -- Drop existing policies if re-running for clean idempotency
 drop policy if exists "Public can read session state" on story_sessions;
@@ -100,6 +119,10 @@ drop policy if exists "Service role has full access to story_sessions" on story_
 drop policy if exists "Service role has full access to admin_config" on admin_config;
 drop policy if exists "Public read access to chapters" on story_chapters;
 drop policy if exists "Public read access to photos" on story_photos;
+drop policy if exists "Public can read audio tracks" on audio_tracks;
+drop policy if exists "Allow server api insert to audio_tracks" on audio_tracks;
+drop policy if exists "Allow server api update to audio_tracks" on audio_tracks;
+drop policy if exists "Allow server api delete to audio_tracks" on audio_tracks;
 
 -- story_sessions: Public can read; server API routes perform authenticated updates
 create policy "Public can read session state"
@@ -128,6 +151,24 @@ create policy "Public read access to chapters"
 
 create policy "Public read access to photos"
   on story_photos for select
+  using (true);
+
+-- Audio tracks: Public read, server API writes
+create policy "Public can read audio tracks"
+  on audio_tracks for select
+  using (true);
+
+create policy "Allow server api insert to audio_tracks"
+  on audio_tracks for insert
+  with check (true);
+
+create policy "Allow server api update to audio_tracks"
+  on audio_tracks for update
+  using (true)
+  with check (true);
+
+create policy "Allow server api delete to audio_tracks"
+  on audio_tracks for delete
   using (true);
 
 -- 8. Enable Realtime Publications for story_sessions

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { getSupabaseServerClient } from '@/lib/supabase';
 import {
   type CategorySlug,
@@ -44,7 +45,8 @@ function savePhotosToCache(photos: PhotoItem[]): void {
 export function getLocalPhotos(): PhotoItem[] {
   if (!global.__mbl_photos_state) {
     const cached = loadPhotosFromCache();
-    global.__mbl_photos_state = cached && cached.length > 0 ? cached : [...DEFAULT_PHOTOS];
+    // Only use cached items — never fall back to broken dummy DEFAULT_PHOTOS URLs
+    global.__mbl_photos_state = cached && cached.length > 0 ? cached : [];
   }
   return global.__mbl_photos_state;
 }
@@ -90,6 +92,7 @@ export async function getPhotosByCategory(categorySlug?: CategorySlug): Promise<
   }
 
   const all = getLocalPhotos();
+  if (all.length === 0) return [];
   if (!categorySlug) return all;
   return all
     .filter((p) => p.categorySlug === categorySlug)
@@ -104,7 +107,7 @@ export async function addPhoto(
 ): Promise<PhotoItem> {
   const newPhoto: PhotoItem = {
     ...payload,
-    id: `photo_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+    id: crypto.randomUUID(),
     createdAt: new Date().toISOString(),
   };
 
@@ -115,7 +118,7 @@ export async function addPhoto(
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      await supabase.from('story_photos').insert({
+      const { error } = await supabase.from('story_photos').insert({
         id: newPhoto.id,
         image_url: newPhoto.imageUrl,
         caption: newPhoto.caption,
@@ -125,8 +128,11 @@ export async function addPhoto(
         is_cover: newPhoto.isCover,
         created_at: newPhoto.createdAt,
       });
-    } catch {
-      // Offline fallback
+      if (error) {
+        console.warn('[supabase photo insert warning]:', error.message);
+      }
+    } catch (err) {
+      console.warn('[supabase photo insert exception]:', err);
     }
   }
 

@@ -12,7 +12,8 @@
     "test:persistence": "npx tsx scripts/test-schedule-persistence.mjs",
     "test:upload": "npx tsx scripts/test-photo-upload.mjs",
     "test:chapters": "npx tsx scripts/test-chapter-system.mjs",
-    "test:all": "npx tsx scripts/test-phase3.mjs && npx tsx scripts/test-phase4.mjs && npx tsx scripts/test-schedule-persistence.mjs && npx tsx scripts/test-photo-upload.mjs && npx tsx scripts/test-chapter-system.mjs"
+    "test:p5": "npx tsx scripts/test-phase5.mjs",
+    "test:all": "npx tsx scripts/test-phase3.mjs && npx tsx scripts/test-phase4.mjs && npx tsx scripts/test-schedule-persistence.mjs && npx tsx scripts/test-photo-upload.mjs && npx tsx scripts/test-chapter-system.mjs && npx tsx scripts/test-phase5.mjs"
   },
   "dependencies": {
     "next": "14.2.35",

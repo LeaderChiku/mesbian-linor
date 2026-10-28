@@ -52,17 +52,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: result.error || 'Failed to apply command' }, { status: 400 });
     }
 
-    if (action.type === 'SET_SCHEDULE') {
-      const syncOk = await syncSessionWithSupabase(result.state);
+    const persistentCommands = new Set([
+      'SET_SCHEDULE',
+      'SET_DEV_TOOLS',
+      'SET_ENDING',
+      'SET_SESSION_STATUS',
+      'SET_TWIST',
+      'UPDATE_CMS',
+      'NAVIGATE',
+    ]);
+    if (persistentCommands.has(action.type)) {
       const isCloudConfigured = Boolean(
         process.env.SUPABASE_URL ||
         process.env.NEXT_PUBLIC_SUPABASE_URL
       );
-      if (isCloudConfigured && !syncOk) {
-        return NextResponse.json({
-          error: 'Failed to write schedule to persistent database. Check Supabase connection and table RLS permissions.',
-          state: result.state,
-        }, { status: 500 });
+      if (isCloudConfigured) {
+        const syncOk = await syncSessionWithSupabase(result.state);
+        if (!syncOk && action.type === 'SET_SCHEDULE') {
+          return NextResponse.json({
+            error: 'Failed to write schedule to persistent database. Check Supabase connection and table RLS permissions.',
+            state: result.state,
+          }, { status: 500 });
+        }
       }
     }
 

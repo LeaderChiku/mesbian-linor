@@ -26,6 +26,7 @@ export interface StorySessionState {
   selectedEnding: string | null;
   isBlackScreen: boolean;
   isTwistActive: boolean; // Phase 4 Romantic Twist state
+  showDevTools: boolean; // Admin-controlled dev tools visibility
   readyToBeginAt: string | null; // Phase 4 Ready-to-Begin timestamp
   notifications: NotificationItem[]; // Phase 4 live admin notifications
   cmsData: Record<string, string>; // Phase 4 editable CMS values
@@ -100,6 +101,7 @@ export function ensureSessionState(): StorySessionState {
       selectedEnding: cachedState?.selectedEnding || null,
       isBlackScreen: cachedState?.isBlackScreen ?? false,
       isTwistActive: cachedState?.isTwistActive ?? false,
+      showDevTools: cachedState?.showDevTools ?? false,
       readyToBeginAt: cachedState?.readyToBeginAt || null,
       notifications: cachedState?.notifications || [],
       cmsData: cachedState?.cmsData || {},
@@ -148,6 +150,7 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
       selected_ending: state.selectedEnding,
       is_black_screen: state.isBlackScreen,
       is_twist_active: state.isTwistActive,
+      show_dev_tools: state.showDevTools ?? false,
       ready_to_begin_at: state.readyToBeginAt,
       notifications: state.notifications,
       cms_data: state.cmsData,
@@ -168,7 +171,7 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
 
     if (error) {
       console.warn('[supabase sync warning, trying core fallback]:', error.message);
-      // Fallback 1: Core columns (compatible with phase 2/3 schema)
+      // Fallback 1: Core columns (compatible with phase 2/3 schema + Phase 4/5 additions)
       const corePayload = {
         session_id: state.sessionId,
         story_title: state.storyTitle,
@@ -176,10 +179,15 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
         session_status: state.sessionStatus,
         current_section_id: state.currentSectionId,
         current_section_index: state.currentSectionIndex,
+        unlocked_chapter_index: state.unlockedChapterIndex ?? 0,
         total_sections: state.totalSections,
         selected_ending: state.selectedEnding,
         is_black_screen: state.isBlackScreen,
+        is_twist_active: state.isTwistActive ?? false,
+        show_dev_tools: state.showDevTools ?? false,
         ready_to_begin_at: state.readyToBeginAt,
+        notifications: state.notifications ?? [],
+        cms_data: state.cmsData ?? {},
         selected_audio_id: state.selectedAudioId,
         command_seq: state.commandSeq,
         last_command: state.lastCommand,
@@ -247,6 +255,7 @@ export async function loadSessionFromSupabase(): Promise<Partial<StorySessionSta
       selectedEnding: data.selected_ending !== undefined ? data.selected_ending : null,
       isBlackScreen: typeof data.is_black_screen === 'boolean' ? data.is_black_screen : undefined,
       isTwistActive: typeof data.is_twist_active === 'boolean' ? data.is_twist_active : undefined,
+      showDevTools: typeof data.show_dev_tools === 'boolean' ? data.show_dev_tools : undefined,
       readyToBeginAt: data.ready_to_begin_at !== undefined ? data.ready_to_begin_at : null,
       notifications: Array.isArray(data.notifications) ? data.notifications : undefined,
       cmsData: data.cms_data && typeof data.cms_data === 'object' ? data.cms_data : undefined,
@@ -350,6 +359,7 @@ export function applyAdminCommand(
     | { type: 'CLEAR_NOTIFICATIONS' }
     | { type: 'UPDATE_CMS'; data: Record<string, string> }
     | { type: 'REPORT_AUDIO_STATE'; state: 'playing' | 'paused' | 'stopped' | 'ducked' | 'ready' }
+    | { type: 'SET_DEV_TOOLS'; enabled: boolean }
 ): { success: boolean; state: StorySessionState; error?: string } {
   ensureSessionState();
   global.__mbl_has_hydrated = true;
@@ -481,6 +491,13 @@ export function applyAdminCommand(
 
     case 'REPORT_AUDIO_STATE': {
       current.audioState = action.state;
+      break;
+    }
+
+    case 'SET_DEV_TOOLS': {
+      current.showDevTools = action.enabled;
+      current.commandSeq += 1;
+      current.lastCommand = action.enabled ? 'DEV_TOOLS_ON' : 'DEV_TOOLS_OFF';
       break;
     }
   }
