@@ -18,7 +18,7 @@ interface Shard {
   hue: number;
 }
 
-function generateShards(count = 20): Shard[] {
+function generateShards(count = 14): Shard[] {
   const shards: Shard[] = [];
   for (let i = 0; i < count; i++) {
     const angle = Math.random() * Math.PI * 2;
@@ -53,7 +53,7 @@ function generateShards(count = 20): Shard[] {
 }
 
 export default function GlassShatterTransition({ onComplete }: GlassShatterTransitionProps) {
-  const [shards] = useState<Shard[]>(() => generateShards(20));
+  const [shards] = useState<Shard[]>(() => generateShards(14));
   const [stage, setStage] = useState<'freeze' | 'crack' | 'shatter'>('freeze');
   const onCompleteRef = useRef(onComplete);
   const hasCompletedRef = useRef(false);
@@ -142,7 +142,7 @@ export default function GlassShatterTransition({ onComplete }: GlassShatterTrans
         </svg>
       )}
 
-      {/* Exploding glass shards with specular gradient reflection */}
+      {/* Exploding glass shards with specular gradient reflection (hardware accelerated) */}
       {stage === 'shatter' && (
         <div className="relative w-full h-full">
           {shards.map((shard) => (
@@ -156,15 +156,14 @@ export default function GlassShatterTransition({ onComplete }: GlassShatterTrans
                 opacity: 0,
               }}
               transition={{
-                duration: 0.8,
+                duration: 0.75,
                 delay: shard.delay,
                 ease: [0.2, 0.8, 0.4, 1],
               }}
               style={{
                 clipPath: shard.clipPath,
-                filter: `hue-rotate(${shard.hue}deg) brightness(1.35)`,
               }}
-              className="absolute inset-0 bg-gradient-to-br from-white/90 via-sky-100/60 to-rose-100/40 border border-white/70 shadow-2xl backdrop-blur-sm"
+              className="absolute inset-0 transform-gpu will-change-transform bg-gradient-to-br from-white/95 via-sky-100/70 to-rose-100/50 border border-white/80 shadow-md"
             />
           ))}
 
@@ -172,7 +171,7 @@ export default function GlassShatterTransition({ onComplete }: GlassShatterTrans
           <motion.div
             initial={{ opacity: 1 }}
             animate={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: 0.35 }}
             className="absolute inset-0 bg-white"
           />
         </div>

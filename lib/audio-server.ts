@@ -178,6 +178,30 @@ export async function uploadAudioFile(
         }
       } else if (uploadErr) {
         console.warn('[supabase audio storage warning]:', uploadErr.message);
+
+        // If bucket does not exist, attempt auto-creation if privileged
+        if (uploadErr.message?.toLowerCase().includes('not found') || uploadErr.message?.toLowerCase().includes('bucket')) {
+          try {
+            const { error: createErr } = await supabase.storage.createBucket('audio', {
+              public: true,
+              fileSizeLimit: 52428800, // 50MB
+            });
+            if (!createErr) {
+              const retry = await supabase.storage.from('audio').upload(uniqueKey, buffer, {
+                contentType: file.type || 'audio/mpeg',
+                upsert: true,
+              });
+              if (!retry.error && retry.data) {
+                const { data: urlData } = supabase.storage.from('audio').getPublicUrl(uniqueKey);
+                if (urlData?.publicUrl) {
+                  finalUrl = urlData.publicUrl;
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
     } catch (storageErr) {
       console.warn('[supabase audio storage exception]:', storageErr);
@@ -258,12 +282,31 @@ export async function deleteAudioTrack(id: string): Promise<boolean> {
     try {
       await supabase.from('audio_tracks').delete().eq('id', id);
       // Clean up object in storage if applicable
-      const urlParts = track.storageUrl.split('/audio/');
-      if (urlParts.length > 1) {
-        await supabase.storage.from('audio').remove([`audio/${urlParts[1]}`]);
+      const bucketPrefix = '/storage/v1/object/public/audio/';
+      let storagePath = '';
+      if (track.storageUrl.includes(bucketPrefix)) {
+        storagePath = track.storageUrl.split(bucketPrefix)[1];
+      } else if (track.storageUrl.includes('/audio/')) {
+        const idx = track.storageUrl.indexOf('/audio/');
+        storagePath = track.storageUrl.slice(idx + 7);
+      }
+      if (storagePath) {
+        await supabase.storage.from('audio').remove([storagePath.split('?')[0]]);
       }
     } catch (err) {
       console.warn('[supabase audio delete error]:', err);
+    }
+  }
+
+  // Also clean up local file if stored locally in public/uploads/
+  if (track.storageUrl.startsWith('/uploads/')) {
+    try {
+      const localFilePath = path.join(process.cwd(), 'public', track.storageUrl.replace(/^\//, ''));
+      if (fs.existsSync(localFilePath)) {
+        fs.unlinkSync(localFilePath);
+      }
+    } catch {
+      // ignore
     }
   }
 

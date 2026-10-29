@@ -1,11 +1,12 @@
 [
   {
-    "id": "test-1",
-    "imageUrl": "/test.jpg",
-    "caption": "Test",
     "categorySlug": "the-golden-hour",
-    "orderIndex": 0,
-    "isCover": false,
-    "createdAt": "2026-10-25T10:37:09.424Z"
+    "imageUrl": "/uploads/photos/the-golden-hour/photoB.jpg",
+    "caption": "Sunset Memory B",
+    "orderIndex": 1,
+    "isCover": true,
+    "dateLabel": "Oct 2026",
+    "id": "bc469d7a-8f56-4a9b-92a6-ad7c8443db2d",
+    "createdAt": "2026-10-29T12:55:45.803Z"
   }
 ]

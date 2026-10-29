@@ -170,9 +170,9 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
     );
 
     if (error) {
-      console.warn('[supabase sync warning, trying core fallback]:', error.message);
-      // Fallback 1: Core columns (compatible with phase 2/3 schema + Phase 4/5 additions)
-      const corePayload = {
+      console.warn('[supabase sync warning, trying phase4 fallback]:', error.message);
+      // Fallback 1: Phase 4 schema (includes cms_data, twist, notifications, without show_dev_tools or new audio)
+      const phase4Payload = {
         session_id: state.sessionId,
         story_title: state.storyTitle,
         scheduled_at: state.scheduledAt,
@@ -184,7 +184,6 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
         selected_ending: state.selectedEnding,
         is_black_screen: state.isBlackScreen,
         is_twist_active: state.isTwistActive ?? false,
-        show_dev_tools: state.showDevTools ?? false,
         ready_to_begin_at: state.readyToBeginAt,
         notifications: state.notifications ?? [],
         cms_data: state.cmsData ?? {},
@@ -194,24 +193,38 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
         updated_at: new Date().toISOString(),
       };
       const fallbackResult = await supabase.from('story_sessions').upsert(
-        corePayload,
+        phase4Payload,
         { onConflict: 'session_id' }
       );
       if (fallbackResult.error) {
-        // Fallback 2: Minimal upsert with just session_id and scheduled_at
-        const minimalUpsert = await supabase
+        console.warn('[supabase sync warning, trying cms+schedule fallback]:', fallbackResult.error.message);
+        // Fallback 2: Essential schedule + cms_data
+        const cmsSchedulePayload = {
+          session_id: state.sessionId,
+          scheduled_at: state.scheduledAt,
+          cms_data: state.cmsData ?? {},
+          updated_at: new Date().toISOString(),
+        };
+        const minimalCmsUpsert = await supabase
           .from('story_sessions')
-          .upsert(
-            {
-              session_id: state.sessionId,
-              scheduled_at: state.scheduledAt,
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: 'session_id' }
-          );
-        if (minimalUpsert.error) {
-          console.error('[supabase sync write error]:', minimalUpsert.error.message);
-          return false;
+          .upsert(cmsSchedulePayload, { onConflict: 'session_id' });
+
+        if (minimalCmsUpsert.error) {
+          // Fallback 3: Minimal upsert with just session_id and scheduled_at (only if cms_data column doesn't exist)
+          const minimalUpsert = await supabase
+            .from('story_sessions')
+            .upsert(
+              {
+                session_id: state.sessionId,
+                scheduled_at: state.scheduledAt,
+                updated_at: new Date().toISOString(),
+              },
+              { onConflict: 'session_id' }
+            );
+          if (minimalUpsert.error) {
+            console.error('[supabase sync write error]:', minimalUpsert.error.message);
+            return false;
+          }
         }
       }
     }
@@ -241,33 +254,38 @@ export async function loadSessionFromSupabase(): Promise<Partial<StorySessionSta
       return null;
     }
 
-    return {
-      sessionId: data.session_id,
-      storyTitle: data.story_title || undefined,
-      scheduledAt: data.scheduled_at !== undefined ? data.scheduled_at : null,
-      sessionStatus: data.session_status || undefined,
-      currentSectionId: data.current_section_id || undefined,
-      currentSectionIndex: typeof data.current_section_index === 'number' ? data.current_section_index : undefined,
-      unlockedChapterIndex: typeof data.unlocked_chapter_index === 'number'
-        ? data.unlocked_chapter_index
-        : (typeof data.current_section_index === 'number' ? data.current_section_index : undefined),
-      totalSections: typeof data.total_sections === 'number' ? data.total_sections : undefined,
-      selectedEnding: data.selected_ending !== undefined ? data.selected_ending : null,
-      isBlackScreen: typeof data.is_black_screen === 'boolean' ? data.is_black_screen : undefined,
-      isTwistActive: typeof data.is_twist_active === 'boolean' ? data.is_twist_active : undefined,
-      showDevTools: typeof data.show_dev_tools === 'boolean' ? data.show_dev_tools : undefined,
-      readyToBeginAt: data.ready_to_begin_at !== undefined ? data.ready_to_begin_at : null,
-      notifications: Array.isArray(data.notifications) ? data.notifications : undefined,
-      cmsData: data.cms_data && typeof data.cms_data === 'object' ? data.cms_data : undefined,
-      selectedAudioId: data.selected_audio_id || undefined,
-      audioCommand: data.audio_command || undefined,
-      audioState: data.audio_state || undefined,
-      audioType: data.audio_type || undefined,
-      audioVolume: typeof data.audio_volume === 'number' ? data.audio_volume : undefined,
-      commandSeq: typeof data.command_seq === 'number' ? data.command_seq : undefined,
-      lastCommand: data.last_command || undefined,
-      updatedAt: data.updated_at || undefined,
-    };
+    const loaded: Partial<StorySessionState> = {};
+    if (data.session_id) loaded.sessionId = data.session_id;
+    if (data.story_title) loaded.storyTitle = data.story_title;
+    if (data.scheduled_at !== undefined) loaded.scheduledAt = data.scheduled_at;
+    if (data.session_status) loaded.sessionStatus = data.session_status;
+    if (data.current_section_id) loaded.currentSectionId = data.current_section_id;
+    if (typeof data.current_section_index === 'number') loaded.currentSectionIndex = data.current_section_index;
+    if (typeof data.unlocked_chapter_index === 'number') {
+      loaded.unlockedChapterIndex = data.unlocked_chapter_index;
+    } else if (typeof data.current_section_index === 'number') {
+      loaded.unlockedChapterIndex = data.current_section_index;
+    }
+    if (typeof data.total_sections === 'number') loaded.totalSections = data.total_sections;
+    if (data.selected_ending !== undefined) loaded.selectedEnding = data.selected_ending;
+    if (typeof data.is_black_screen === 'boolean') loaded.isBlackScreen = data.is_black_screen;
+    if (typeof data.is_twist_active === 'boolean') loaded.isTwistActive = data.is_twist_active;
+    if (typeof data.show_dev_tools === 'boolean') loaded.showDevTools = data.show_dev_tools;
+    if (data.ready_to_begin_at !== undefined) loaded.readyToBeginAt = data.ready_to_begin_at;
+    if (Array.isArray(data.notifications)) loaded.notifications = data.notifications;
+    if (data.cms_data && typeof data.cms_data === 'object' && Object.keys(data.cms_data).length > 0) {
+      loaded.cmsData = data.cms_data;
+    }
+    if (data.selected_audio_id) loaded.selectedAudioId = data.selected_audio_id;
+    if (data.audio_command) loaded.audioCommand = data.audio_command;
+    if (data.audio_state) loaded.audioState = data.audio_state;
+    if (data.audio_type) loaded.audioType = data.audio_type;
+    if (typeof data.audio_volume === 'number') loaded.audioVolume = data.audio_volume;
+    if (typeof data.command_seq === 'number') loaded.commandSeq = data.command_seq;
+    if (data.last_command) loaded.lastCommand = data.last_command;
+    if (data.updated_at) loaded.updatedAt = data.updated_at;
+
+    return loaded;
   } catch (err) {
     console.warn('[supabase load error]:', err);
     return null;
@@ -284,9 +302,14 @@ export async function getAuthoritativeSessionState(): Promise<StorySessionState>
     try {
       const dbState = await loadSessionFromSupabase();
       if (dbState && global.__mbl_session_state) {
+        const mergedCms = {
+          ...(global.__mbl_session_state.cmsData || {}),
+          ...(dbState.cmsData || {}),
+        };
         global.__mbl_session_state = {
           ...global.__mbl_session_state,
           ...dbState,
+          cmsData: mergedCms,
           scheduledAt: dbState.scheduledAt !== undefined ? dbState.scheduledAt : global.__mbl_session_state.scheduledAt,
         };
         saveStateToCache(global.__mbl_session_state);
@@ -491,7 +514,8 @@ export function applyAdminCommand(
 
     case 'REPORT_AUDIO_STATE': {
       current.audioState = action.state;
-      break;
+      // Do not sync to Supabase or increment commandSeq on periodic audio playback reports
+      return { success: true, state: { ...current } };
     }
 
     case 'SET_DEV_TOOLS': {

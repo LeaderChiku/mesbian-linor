@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Ensure state is fully hydrated from Supabase before executing administrative command
+    await getAuthoritativeSessionState();
+
     const action = await req.json();
 
     if (!action || !action.type) {

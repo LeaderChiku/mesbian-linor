@@ -74,7 +74,7 @@ export async function getPhotosByCategory(categorySlug?: CategorySlug): Promise<
 
       const { data, error } = await query;
       if (!error && data && data.length > 0) {
-        return data.map((d) => ({
+        const mapped: PhotoItem[] = data.map((d) => ({
           id: d.id,
           imageUrl: d.image_url,
           caption: d.caption || '',
@@ -85,6 +85,15 @@ export async function getPhotosByCategory(categorySlug?: CategorySlug): Promise<
           dateLabel: d.date_label || '',
           createdAt: d.created_at || new Date().toISOString(),
         }));
+
+        // Synchronize local cache with authoritative Supabase data
+        const currentAll = getLocalPhotos();
+        const otherCategories = categorySlug
+          ? currentAll.filter((p) => p.categorySlug !== categorySlug)
+          : [];
+        setLocalPhotos([...otherCategories, ...mapped]);
+
+        return mapped;
       }
     } catch {
       // Fallback to local
@@ -112,12 +121,26 @@ export async function addPhoto(
   };
 
   const current = getLocalPhotos();
-  const updated = [...current, newPhoto];
-  setLocalPhotos(updated);
+  // If new photo is cover, unset cover on any other photo in this category
+  let updatedList = [...current];
+  if (newPhoto.isCover) {
+    updatedList = updatedList.map((p) =>
+      p.categorySlug === newPhoto.categorySlug ? { ...p, isCover: false } : p
+    );
+  }
+  updatedList.push(newPhoto);
+  setLocalPhotos(updatedList);
 
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
+      if (newPhoto.isCover) {
+        await supabase
+          .from('story_photos')
+          .update({ is_cover: false })
+          .eq('category_slug', newPhoto.categorySlug);
+      }
+
       const { error } = await supabase.from('story_photos').insert({
         id: newPhoto.id,
         image_url: newPhoto.imageUrl,
@@ -126,6 +149,7 @@ export async function addPhoto(
         category_slug: newPhoto.categorySlug,
         order_index: newPhoto.orderIndex,
         is_cover: newPhoto.isCover,
+        date_label: newPhoto.dateLabel,
         created_at: newPhoto.createdAt,
       });
       if (error) {
@@ -148,30 +172,78 @@ export async function updatePhoto(
 ): Promise<PhotoItem | null> {
   const current = getLocalPhotos();
   const index = current.findIndex((p) => p.id === id);
-  if (index === -1) return null;
-
-  const updatedItem = { ...current[index], ...updates };
-  current[index] = updatedItem;
-  setLocalPhotos([...current]);
+  const targetCategory = updates.categorySlug || (index !== -1 ? current[index].categorySlug : undefined);
 
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      await supabase
+      if (updates.isCover && targetCategory) {
+        await supabase
+          .from('story_photos')
+          .update({ is_cover: false })
+          .eq('category_slug', targetCategory)
+          .neq('id', id);
+      }
+
+      const dbUpdatePayload: Record<string, unknown> = {};
+      if (updates.imageUrl !== undefined) dbUpdatePayload.image_url = updates.imageUrl;
+      if (updates.caption !== undefined) dbUpdatePayload.caption = updates.caption;
+      if (updates.comments !== undefined) dbUpdatePayload.comments = updates.comments;
+      if (updates.categorySlug !== undefined) dbUpdatePayload.category_slug = updates.categorySlug;
+      if (updates.orderIndex !== undefined) dbUpdatePayload.order_index = updates.orderIndex;
+      if (updates.isCover !== undefined) dbUpdatePayload.is_cover = updates.isCover;
+      if (updates.dateLabel !== undefined) dbUpdatePayload.date_label = updates.dateLabel;
+
+      const { data, error } = await supabase
         .from('story_photos')
-        .update({
-          image_url: updatedItem.imageUrl,
-          caption: updatedItem.caption,
-          comments: updatedItem.comments,
-          category_slug: updatedItem.categorySlug,
-          order_index: updatedItem.orderIndex,
-          is_cover: updatedItem.isCover,
-        })
-        .eq('id', id);
-    } catch {
-      // Offline fallback
+        .update(dbUpdatePayload)
+        .eq('id', id)
+        .select()
+        .maybeSingle();
+
+      if (!error && data) {
+        const updatedFromDb: PhotoItem = {
+          id: data.id,
+          imageUrl: data.image_url,
+          caption: data.caption || '',
+          comments: data.comments || '',
+          categorySlug: data.category_slug as CategorySlug,
+          orderIndex: data.order_index ?? 0,
+          isCover: Boolean(data.is_cover),
+          dateLabel: data.date_label || '',
+          createdAt: data.created_at || new Date().toISOString(),
+        };
+
+        let updatedList = [...current];
+        if (updates.isCover && targetCategory) {
+          updatedList = updatedList.map((p) =>
+            p.categorySlug === targetCategory && p.id !== id ? { ...p, isCover: false } : p
+          );
+        }
+        if (index !== -1) {
+          updatedList[index] = updatedFromDb;
+        } else {
+          updatedList.push(updatedFromDb);
+        }
+        setLocalPhotos(updatedList);
+        return updatedFromDb;
+      }
+    } catch (err) {
+      console.warn('[supabase photo update exception]:', err);
     }
   }
+
+  if (index === -1) return null;
+
+  let updatedList = [...current];
+  if (updates.isCover && targetCategory) {
+    updatedList = updatedList.map((p) =>
+      p.categorySlug === targetCategory && p.id !== id ? { ...p, isCover: false } : p
+    );
+  }
+  const updatedItem = { ...updatedList[index], ...updates };
+  updatedList[index] = updatedItem;
+  setLocalPhotos(updatedList);
 
   return updatedItem;
 }
@@ -181,21 +253,57 @@ export async function updatePhoto(
  */
 export async function deletePhoto(id: string): Promise<boolean> {
   const current = getLocalPhotos();
+  const toDelete = current.find((p) => p.id === id);
   const filtered = current.filter((p) => p.id !== id);
-  if (filtered.length === current.length) return false;
 
-  setLocalPhotos(filtered);
-
+  let deletedFromSupabase = false;
   const supabase = getSupabaseServerClient();
   if (supabase) {
     try {
-      await supabase.from('story_photos').delete().eq('id', id);
+      const { error, count } = await supabase
+        .from('story_photos')
+        .delete({ count: 'exact' })
+        .eq('id', id);
+
+      if (!error && (count ?? 0) > 0) {
+        deletedFromSupabase = true;
+      }
+
+      // Also clean up Supabase Storage file if URL is in Supabase 'photos' bucket
+      if (toDelete?.imageUrl && toDelete.imageUrl.includes('/photos/')) {
+        try {
+          const parts = toDelete.imageUrl.split('/photos/');
+          if (parts.length > 1) {
+            const storagePath = parts[1].split('?')[0];
+            await supabase.storage.from('photos').remove([storagePath]);
+          }
+        } catch {
+          // ignore
+        }
+      }
     } catch {
       // Offline fallback
     }
   }
 
-  return true;
+  // Also clean up local file if stored locally in public/uploads/
+  if (toDelete?.imageUrl && toDelete.imageUrl.startsWith('/uploads/')) {
+    try {
+      const localFilePath = path.join(process.cwd(), 'public', toDelete.imageUrl.replace(/^\//, ''));
+      if (fs.existsSync(localFilePath)) {
+        fs.unlinkSync(localFilePath);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const hadLocal = filtered.length !== current.length;
+  if (hadLocal) {
+    setLocalPhotos(filtered);
+  }
+
+  return deletedFromSupabase || hadLocal;
 }
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -263,6 +371,30 @@ export async function uploadPhotoFile(
         }
       } else if (uploadErr) {
         console.warn('[supabase storage warning]:', uploadErr.message);
+
+        // If bucket does not exist, attempt auto-creation if privileged
+        if (uploadErr.message?.toLowerCase().includes('not found') || uploadErr.message?.toLowerCase().includes('bucket')) {
+          try {
+            const { error: createErr } = await supabase.storage.createBucket('photos', {
+              public: true,
+              fileSizeLimit: 10485760, // 10MB
+            });
+            if (!createErr) {
+              const retry = await supabase.storage.from('photos').upload(uniqueKey, buffer, {
+                contentType: file.type || 'image/jpeg',
+                upsert: true,
+              });
+              if (!retry.error && retry.data) {
+                const { data: urlData } = supabase.storage.from('photos').getPublicUrl(uniqueKey);
+                if (urlData?.publicUrl) {
+                  finalUrl = urlData.publicUrl;
+                }
+              }
+            }
+          } catch {
+            // ignore
+          }
+        }
       }
     } catch (storageErr) {
       console.warn('[supabase storage exception]:', storageErr);

@@ -31,6 +31,9 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // Ensure state is fully hydrated from Supabase before applying CMS updates
+    await getAuthoritativeSessionState();
+
     const body = await req.json();
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ error: 'Invalid CMS payload' }, { status: 400 });
