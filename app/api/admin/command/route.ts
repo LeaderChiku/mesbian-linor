@@ -5,7 +5,7 @@ import {
   getAuthoritativeSessionState,
   getStoredVisitorCode,
   applyAdminCommand,
-  syncSessionWithSupabase,
+  persistActionToSupabase,
 } from '@/lib/server-state';
 
 function isAuthorized(req: NextRequest): boolean {
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest) {
         process.env.NEXT_PUBLIC_SUPABASE_URL
       );
       if (isCloudConfigured) {
-        const syncOk = await syncSessionWithSupabase(result.state);
+        const syncOk = await persistActionToSupabase(action, result.state);
         if (!syncOk && action.type === 'SET_SCHEDULE') {
           return NextResponse.json({
             error: 'Failed to write schedule to persistent database. Check Supabase connection and table RLS permissions.',

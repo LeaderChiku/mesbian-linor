@@ -18,6 +18,7 @@ export function useVisitorAudio(session: StorySessionState | null) {
   const [actualPlaybackState, setActualPlaybackState] = useState<'playing' | 'paused' | 'stopped' | 'ducked' | 'ready'>('ready');
 
   const audioCtxRef          = useRef<AudioContext | null>(null);
+  const htmlAudioRef         = useRef<HTMLAudioElement | null>(null);
   const musicGainRef         = useRef<GainNode | null>(null);
   const voiceGainRef         = useRef<GainNode | null>(null);
   const musicTimerRef        = useRef<NodeJS.Timeout | null>(null);
@@ -25,6 +26,19 @@ export function useVisitorAudio(session: StorySessionState | null) {
   const lastExecutedSeqRef   = useRef<number>(0);
   const isDuckedRef          = useRef(false);
   const isPlayingRef         = useRef(false);
+  const [tracksCache, setTracksCache] = useState<Array<{ id: string; storageUrl: string }>>([]);
+
+  // Fetch track library on mount so uploaded audio can be streamed directly
+  useEffect(() => {
+    fetch('/api/audio')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.success && Array.isArray(data.tracks)) {
+          setTracksCache(data.tracks);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // ── Report playback state to server ─────────────────────────
   const reportState = useCallback(async (state: 'playing' | 'paused' | 'stopped' | 'ducked' | 'ready') => {
@@ -154,6 +168,9 @@ export function useVisitorAudio(session: StorySessionState | null) {
   // ── Stop / Pause ────────────────────────────────────────────
   const pauseAudio = useCallback(() => {
     isPlayingRef.current = false;
+    if (htmlAudioRef.current) {
+      htmlAudioRef.current.pause();
+    }
     if (musicTimerRef.current) clearInterval(musicTimerRef.current);
     if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
     if (audioCtxRef.current && audioCtxRef.current.state === 'running') {
@@ -162,19 +179,63 @@ export function useVisitorAudio(session: StorySessionState | null) {
     reportState('paused');
   }, [reportState]);
 
-  // ── User Gesture Unlock Handler (Mobile phone tap) ───────────
-  const unlockAudioOnGesture = useCallback(() => {
-    ensureAudioContext()?.then((unlocked) => {
-      if (unlocked && session?.audioCommand === 'play') {
-        const audioAsset = getAudioById(session.selectedAudioId || '');
-        if (session.audioType === 'voice_note') {
+  // ── Play Active Track (Uploaded MP3 or Zero-Asset Synth) ──────
+  const playActiveTrack = useCallback(async (audioId: string | null) => {
+    if (!audioId) return;
+
+    // Check for uploaded track
+    const uploaded = tracksCache.find((t) => t.id === audioId);
+    if (uploaded && uploaded.storageUrl) {
+      if (musicTimerRef.current) clearInterval(musicTimerRef.current);
+      if (voiceTimerRef.current) clearTimeout(voiceTimerRef.current);
+
+      if (!htmlAudioRef.current) {
+        htmlAudioRef.current = new Audio();
+      }
+      const el = htmlAudioRef.current;
+      if (el.src !== uploaded.storageUrl) {
+        el.src = uploaded.storageUrl;
+      }
+      el.volume = (session?.audioVolume ?? 80) / 100;
+      try {
+        await el.play();
+        isPlayingRef.current = true;
+        setNeedsGesture(false);
+        reportState('playing');
+      } catch {
+        setNeedsGesture(true);
+        reportState('paused');
+      }
+      return;
+    }
+
+    // Built-in synthesized frequency tones
+    if (htmlAudioRef.current) {
+      htmlAudioRef.current.pause();
+    }
+    const ready = ensureAudioContext();
+    if (ready instanceof Promise) {
+      ready.then((unlocked) => {
+        if (!unlocked) {
+          setNeedsGesture(true);
+          return;
+        }
+        const audioAsset = getAudioById(audioId);
+        if (session?.audioType === 'voice_note') {
           startVoiceNote(audioAsset?.synthesizedFrequency);
         } else {
           startMusic(audioAsset?.synthesizedFrequency);
         }
-      }
-    });
-  }, [ensureAudioContext, session?.audioCommand, session?.selectedAudioId, session?.audioType, startMusic, startVoiceNote]);
+      });
+    }
+  }, [tracksCache, session?.audioVolume, session?.audioType, ensureAudioContext, reportState, startVoiceNote, startMusic]);
+
+  // ── User Gesture Unlock Handler (Mobile phone tap) ───────────
+  const unlockAudioOnGesture = useCallback(() => {
+    if (session?.audioCommand === 'play' || session?.audioCommand === 'resume') {
+      playActiveTrack(session.selectedAudioId);
+    }
+  }, [session?.audioCommand, session?.selectedAudioId, playActiveTrack]);
 
   // ── Synchronize with remote Admin commands ──────────────────
   useEffect(() => {
@@ -187,28 +248,20 @@ export function useVisitorAudio(session: StorySessionState | null) {
     lastExecutedSeqRef.current = session.commandSeq;
 
     // Apply volume level (0 to 100)
+    const vol = (session.audioVolume ?? 80) / 100;
     if (musicGainRef.current && audioCtxRef.current) {
-      const vol = (session.audioVolume ?? 80) / 100;
       musicGainRef.current.gain.setValueAtTime(vol, audioCtxRef.current.currentTime);
+    }
+    if (htmlAudioRef.current) {
+      htmlAudioRef.current.volume = vol;
     }
 
     if (session.audioCommand === 'play' || session.audioCommand === 'resume') {
-      const ready = ensureAudioContext();
-      if (ready instanceof Promise) {
-        ready.then((unlocked) => {
-          if (!unlocked) return; // Prompt will be visible
-          const audioAsset = getAudioById(session.selectedAudioId || '');
-          if (session.audioType === 'voice_note') {
-            startVoiceNote(audioAsset?.synthesizedFrequency);
-          } else {
-            startMusic(audioAsset?.synthesizedFrequency);
-          }
-        });
-      }
+      playActiveTrack(session.selectedAudioId);
     } else if (session.audioCommand === 'pause' || session.audioCommand === 'stop') {
       pauseAudio();
     }
-  }, [session, ensureAudioContext, startMusic, startVoiceNote, pauseAudio]);
+  }, [session, playActiveTrack, pauseAudio]);
 
   return {
     needsGesture,

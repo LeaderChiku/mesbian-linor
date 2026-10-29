@@ -23,7 +23,10 @@ import {
 import { getPhotosByCategory } from '../lib/photos-server.ts';
 
 async function run() {
-  console.log('\n--- 1. Testing CMS & Schedule Isolation ---');
+  const initialSessionState = JSON.parse(JSON.stringify(await getAuthoritativeSessionState()));
+
+  try {
+    console.log('\n--- 1. Testing CMS & Schedule Isolation ---');
 
   const testSchedule = '2026-11-20T12:00:00.000Z';
   applyAdminCommand({
@@ -142,6 +145,22 @@ async function run() {
   console.log('\n============================================');
   console.log('All Phase 5 integration tests PASSED successfully!');
   console.log('============================================\n');
+  } finally {
+    if (initialSessionState) {
+      if (initialSessionState.scheduledAt !== undefined) {
+        applyAdminCommand({
+          type: 'SET_SCHEDULE',
+          scheduledAt: initialSessionState.scheduledAt,
+        });
+      }
+      if (initialSessionState.cmsData) {
+        applyAdminCommand({
+          type: 'UPDATE_CMS',
+          data: initialSessionState.cmsData,
+        });
+      }
+    }
+  }
 }
 
 run().catch((err) => {

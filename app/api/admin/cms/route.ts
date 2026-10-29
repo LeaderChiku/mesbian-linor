@@ -3,7 +3,7 @@ import { verifyAdminToken, ADMIN_COOKIE_NAME } from '@/lib/admin-auth';
 import {
   getAuthoritativeSessionState,
   applyAdminCommand,
-  syncSessionWithSupabase,
+  persistActionToSupabase,
 } from '@/lib/server-state';
 import { DEFAULT_CMS_CONTENT } from '@/lib/cms';
 
@@ -60,10 +60,13 @@ export async function POST(req: NextRequest) {
       process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
     );
     if (isCloudConfigured) {
-      const syncOk = await syncSessionWithSupabase(result.state);
+      const syncOk = await persistActionToSupabase(
+        { type: 'UPDATE_CMS', data: sanitizedData },
+        result.state
+      );
       if (!syncOk) {
         return NextResponse.json({
-          error: 'CMS content updated in memory but failed to write to database. Please check Supabase connection.',
+          error: 'Failed to write CMS content to persistent database. Please check Supabase connection.',
           partialSuccess: true,
           cms: { ...DEFAULT_CMS_CONTENT, ...result.state.cmsData },
         }, { status: 500 });

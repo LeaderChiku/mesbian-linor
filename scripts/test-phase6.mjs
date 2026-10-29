@@ -56,7 +56,10 @@ async function testAsync(description, fn) {
 }
 
 async function runAllTests() {
-  console.log('--- 1. Testing CMS Content Persistence & Cold-Start Hydration ---');
+  const initialSessionState = JSON.parse(JSON.stringify(await getAuthoritativeSessionState()));
+
+  try {
+    console.log('--- 1. Testing CMS Content Persistence & Cold-Start Hydration ---');
 
   // Test 1: CMS update
   const sampleCustomCms = {
@@ -238,6 +241,22 @@ async function runAllTests() {
 
   if (passedTests !== totalTests) {
     process.exit(1);
+  }
+  } finally {
+    if (initialSessionState) {
+      if (initialSessionState.scheduledAt !== undefined) {
+        applyAdminCommand({
+          type: 'SET_SCHEDULE',
+          scheduledAt: initialSessionState.scheduledAt,
+        });
+      }
+      if (initialSessionState.cmsData) {
+        applyAdminCommand({
+          type: 'UPDATE_CMS',
+          data: initialSessionState.cmsData,
+        });
+      }
+    }
   }
 }
 

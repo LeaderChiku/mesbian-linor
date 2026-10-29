@@ -33,7 +33,20 @@ import RomanticExperience from '@/components/twist/RomanticExperience';
 export default function StoryApp() {
   const [phase, setPhase]               = useState<StoryPhase>('loading');
   const [openingDone, setOpeningDone]   = useState(false);
-  const [showDevTools, setShowDevTools] = useState(false);
+  const [devToolsManualOverride, setDevToolsManualOverride] = useState(false);
+  const [devToolsPanelOpen, setDevToolsPanelOpen] = useState(false);
+
+  // Keyboard shortcut Ctrl+Shift+D for developer toggle
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        setDevToolsManualOverride((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ── Real-time session synchronization (SSE stream + fallback) ──
   const { session, connectionStatus } = useRealtimeSession();
@@ -109,13 +122,6 @@ export default function StoryApp() {
     }
   }, [session, session?.isTwistActive, session?.commandSeq]);
 
-  // ── Sync Dev Tools visibility with authoritative session state ──
-  useEffect(() => {
-    if (session?.showDevTools !== undefined) {
-      setShowDevTools(session.showDevTools);
-    }
-  }, [session?.showDevTools]);
-
   // ── P4.5 Black Screen Scroll-Lock & Touch-Lock ──
   useEffect(() => {
     if (session?.isBlackScreen) {
@@ -135,17 +141,6 @@ export default function StoryApp() {
     }
   }, [session?.isBlackScreen]);
 
-  // ── Keyboard shortcut to toggle dev preview toolbar (Ctrl + Shift + D) ──
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'd') {
-        setShowDevTools((prev) => !prev);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   // ── Check URL parameters for explicit state preview ─────────
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -156,7 +151,7 @@ export default function StoryApp() {
         setOpeningDone(true);
       }
       if (params.get('dev') === 'true') {
-        setShowDevTools(true);
+        setDevToolsManualOverride(true);
       }
     }
   }, []);
@@ -377,7 +372,7 @@ export default function StoryApp() {
               storyTitle={storyTitle}
               cmsData={session?.cmsData}
               activeSectionIndex={session?.currentSectionIndex ?? 0}
-              unlockedChapterIndex={session?.unlockedChapterIndex ?? session?.currentSectionIndex ?? 0}
+              unlockedChapterIndex={typeof session?.unlockedChapterIndex === 'number' ? session.unlockedChapterIndex : 0}
               selectedEnding={session?.selectedEnding ?? null}
               onLock={handleLockStory}
               onExit={handleLockStory}
@@ -386,68 +381,70 @@ export default function StoryApp() {
         </AnimatePresence>
       </div>
 
-      {/* ── Discreet Dev Preview Pill / Toolbar (Ctrl+Shift+D) ── */}
-      <aside aria-label="Developer Preview Toolbar">
-        <button
-          onClick={() => setShowDevTools((prev) => !prev)}
-          className="fixed bottom-2 left-2 z-40 text-[10px] tracking-wider uppercase bg-black/40 hover:bg-black/80 text-stone-400 hover:text-stone-200 px-2 py-1 rounded-md border border-white/10 backdrop-blur-sm transition-all"
-        >
-          {showDevTools ? '✕ Hide Tools' : '⚙ Dev Tools'}
-        </button>
+      {/* ── Discreet Dev Preview Pill / Toolbar (Controlled by Admin toggle or Ctrl+Shift+D) ── */}
+      {Boolean(session?.showDevTools || devToolsManualOverride) && (
+        <aside aria-label="Developer Preview Toolbar">
+          <button
+            onClick={() => setDevToolsPanelOpen((prev) => !prev)}
+            className="fixed bottom-2 left-2 z-40 text-[10px] tracking-wider uppercase bg-black/40 hover:bg-black/80 text-stone-400 hover:text-stone-200 px-2 py-1 rounded-md border border-white/10 backdrop-blur-sm transition-all"
+          >
+            {devToolsPanelOpen ? '✕ Hide Tools' : '⚙ Dev Tools'}
+          </button>
 
-        {showDevTools && (
-          <div className="fixed bottom-10 left-2 z-50 bg-stone-900/95 text-cream-100 p-3.5 rounded-2xl border border-white/20 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-xs text-xs font-sans">
-            <div className="flex items-center justify-between pb-1 border-b border-white/10">
-              <span className="font-semibold text-pistachio-300">Dev Controls</span>
-              <span className="text-[10px] text-stone-400">Ctrl+Shift+D</span>
-            </div>
+          {devToolsPanelOpen && (
+            <div className="fixed bottom-10 left-2 z-50 bg-stone-900/95 text-cream-100 p-3.5 rounded-2xl border border-white/20 shadow-2xl backdrop-blur-md flex flex-col gap-2 max-w-xs text-xs font-sans">
+              <div className="flex items-center justify-between pb-1 border-b border-white/10">
+                <span className="font-semibold text-pistachio-300">Dev Controls</span>
+                <span className="text-[10px] text-stone-400">Ctrl+Shift+D</span>
+              </div>
 
-            <div className="flex flex-col gap-1 text-[11px] text-stone-300">
-              <div>Phase: <b className="text-cream-100">{phase}</b></div>
-              <div>Section: <b className="text-pistachio-300">{session?.currentSectionIndex ?? 0 + 1} ({session?.currentSectionId})</b></div>
-              <div>Status: <span className="text-cream-100">{session?.sessionStatus}</span></div>
-              <a
-                href="/admin"
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 text-center py-1 rounded bg-pistachio-600/30 text-pistachio-300 border border-pistachio-500/40 text-[11px] font-medium"
-              >
-                ↗ Open /admin Panel
-              </a>
-            </div>
+              <div className="flex flex-col gap-1 text-[11px] text-stone-300">
+                <div>Phase: <b className="text-cream-100">{phase}</b></div>
+                <div>Section: <b className="text-pistachio-300">{(session?.currentSectionIndex ?? 0) + 1} ({session?.currentSectionId})</b></div>
+                <div>Status: <span className="text-cream-100">{session?.sessionStatus}</span></div>
+                <a
+                  href="/admin"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 text-center py-1 rounded bg-pistachio-600/30 text-pistachio-300 border border-pistachio-500/40 text-[11px] font-medium"
+                >
+                  ↗ Open /admin Panel
+                </a>
+              </div>
 
-            <div className="grid grid-cols-2 gap-1.5 pt-1">
-              <button
-                onClick={() => setPhase('countdown')}
-                className="px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-left text-[11px]"
-              >
-                ⏳ Countdown
-              </button>
-              <button
-                onClick={() => setPhase('access')}
-                className="px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-left text-[11px]"
-              >
-                🔑 Passcode
-              </button>
-              <button
-                onClick={() => { markVerified(); setPhase('story'); }}
-                className="px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-left text-[11px]"
-              >
-                📖 Story
-              </button>
-              <button
-                onClick={() => {
-                  clearSession();
-                  window.location.reload();
-                }}
-                className="px-2 py-1.5 rounded-lg bg-blush-400/20 text-blush-300 text-left text-[11px]"
-              >
-                🔄 Reset
-              </button>
+              <div className="grid grid-cols-2 gap-1.5 pt-1">
+                <button
+                  onClick={() => setPhase('countdown')}
+                  className="px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-left text-[11px]"
+                >
+                  ⏳ Countdown
+                </button>
+                <button
+                  onClick={() => setPhase('access')}
+                  className="px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-left text-[11px]"
+                >
+                  🔑 Passcode
+                </button>
+                <button
+                  onClick={() => { markVerified(); setPhase('story'); }}
+                  className="px-2 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-left text-[11px]"
+                >
+                  📖 Story
+                </button>
+                <button
+                  onClick={() => {
+                    clearSession();
+                    window.location.reload();
+                  }}
+                  className="px-2 py-1.5 rounded-lg bg-blush-400/20 text-blush-300 text-left text-[11px]"
+                >
+                  🔄 Reset
+                </button>
+              </div>
             </div>
-          </div>
-        )}
-      </aside>
+          )}
+        </aside>
+      )}
     </main>
   );
 }

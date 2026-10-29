@@ -25,7 +25,10 @@ import { kolkataToUTC, utcToKolkataParts, formatKolkataDate } from '../lib/sched
 import { verifyAdminToken } from '../lib/admin-auth.ts';
 
 async function run() {
-  console.log('\n--- 1. Testing Schedule Setting & Admin Closure ---');
+  const initialSessionState = JSON.parse(JSON.stringify(await getAuthoritativeSessionState()));
+
+  try {
+    console.log('\n--- 1. Testing Schedule Setting & Admin Closure ---');
 
   const customSchedule = '2026-11-14T18:30:00.000Z';
 
@@ -145,6 +148,22 @@ async function run() {
   console.log('\n============================================');
   console.log('All schedule persistence tests PASSED successfully!');
   console.log('============================================\n');
+  } finally {
+    if (initialSessionState) {
+      if (initialSessionState.scheduledAt !== undefined) {
+        applyAdminCommand({
+          type: 'SET_SCHEDULE',
+          scheduledAt: initialSessionState.scheduledAt,
+        });
+      }
+      if (initialSessionState.cmsData) {
+        applyAdminCommand({
+          type: 'UPDATE_CMS',
+          data: initialSessionState.cmsData,
+        });
+      }
+    }
+  }
 }
 
 run().catch((err) => {

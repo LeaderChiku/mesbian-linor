@@ -52,9 +52,7 @@ export default function WelcomeSection({
   const [activeCategory, setActiveCategory] = useState<CategorySlug | null>(null);
 
   // Authoritative unlocked chapter boundary (0 = Prologue only, 1 = Ch 1, 2 = Ch 2, 3 = Ch 3, 4 = Ch 4)
-  const unlockedIdx = typeof unlockedChapterIndex === 'number'
-    ? unlockedChapterIndex
-    : (activeSectionIndex ?? 0);
+  const unlockedIdx = typeof unlockedChapterIndex === 'number' ? unlockedChapterIndex : 0;
 
   // Smoothly scroll visitor phone to the section navigated by Admin
   useEffect(() => {

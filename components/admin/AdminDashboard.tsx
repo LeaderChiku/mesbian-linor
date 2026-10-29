@@ -52,6 +52,22 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // ── Audio controls state ────────────────────────────────────
   const [selectedAudioId, setSelectedAudioId] = useState<string>('music-chimes');
   const [volumeLevel, setVolumeLevel]         = useState<number>(80);
+  const [uploadedTracks, setUploadedTracks]   = useState<Array<{ id: string; title: string; storageUrl: string }>>([]);
+
+  // Fetch uploaded audio tracks from persistent library
+  const fetchUploadedTracks = useCallback(async () => {
+    try {
+      const res = await fetch('/api/audio', { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.tracks)) {
+          setUploadedTracks(data.tracks);
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch audio tracks:', err);
+    }
+  }, []);
 
   // ── Exit confirmation modal ─────────────────────────────────
   const [showExitModal, setShowExitModal] = useState(false);
@@ -96,6 +112,7 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
   // ── Connect SSE for instantaneous Admin feedback ───────────
   useEffect(() => {
     fetchAdminState();
+    fetchUploadedTracks();
 
     const es = new EventSource('/api/session/stream');
     es.onmessage = (event) => {
@@ -467,6 +484,22 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   ))}
                 </select>
               </div>
+
+              {/* Reset to Prologue Control */}
+              <div className="pt-2 border-t border-stone-800/60 flex justify-between items-center">
+                <span className="text-[11px] text-stone-400">Story State:</span>
+                <button
+                  onClick={() => {
+                    if (window.confirm('Reset story to Prologue? Chapters I through IV will be locked until you press Next Section.')) {
+                      executeCommand({ type: 'NAVIGATE', sectionIndex: 0, unlockedChapterIndex: 0 }, 'Reset to Prologue');
+                    }
+                  }}
+                  disabled={Boolean(savingAction)}
+                  className="px-2.5 py-1 rounded bg-stone-800 hover:bg-stone-700 text-stone-300 text-[10px] font-semibold uppercase tracking-wider border border-stone-700/80 transition-colors"
+                >
+                  🔒 Reset to Prologue (Lock Chapters)
+                </button>
+              </div>
             </section>
 
             {/* Section 2: Audio & Voice Note Controls */}
@@ -498,6 +531,15 @@ export default function AdminDashboard({ onLogout }: AdminDashboardProps) {
                   onChange={(e) => setSelectedAudioId(e.target.value)}
                   className="w-full bg-stone-950 border border-stone-800 text-xs text-cream-200 rounded-lg px-3 py-2.5 outline-none focus:border-pistachio-500 cursor-pointer"
                 >
+                  {uploadedTracks.length > 0 && (
+                    <optgroup label="Uploaded Audio Library">
+                      {uploadedTracks.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          🎵 [Uploaded] {t.title}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                   <optgroup label="Associated with this Section">
                     {currentSection.associatedAudios.map((a) => (
                       <option key={a.id} value={a.id}>

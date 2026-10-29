@@ -19,17 +19,66 @@ export default function CategoryCollageModal({
 }: CategoryCollageModalProps) {
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const categoryMeta = PHOTO_CATEGORIES.find((c) => c.slug === categorySlug);
 
-  // Close on Escape key
+  const handleDownload = async (photo: PhotoItem) => {
+    if (!photo.imageUrl) return;
+    try {
+      const sanitizedTitle =
+        (photo.caption || 'scrapbook-photo')
+          .toLowerCase()
+          .replace(/[^a-z0-9_-]/gi, '_')
+          .replace(/_+/g, '_')
+          .replace(/^_+|_+$/g, '')
+          .slice(0, 50) || 'memory-photo';
+      const filename = `${sanitizedTitle}.jpg`;
+
+      const res = await fetch(photo.imageUrl);
+      if (!res.ok) throw new Error('Blob fetch failed');
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(blobUrl);
+    } catch {
+      const link = document.createElement('a');
+      link.href = photo.imageUrl;
+      link.download = `${(photo.caption || 'photo').replace(/[^a-z0-9_-]/gi, '_')}.jpg`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  // Close on Escape key / arrow key navigation for lightbox
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (lightboxIndex !== null) {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          setLightboxIndex(null);
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          setLightboxIndex((prev) => (prev !== null && prev > 0 ? prev - 1 : photos.length - 1));
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          setLightboxIndex((prev) => (prev !== null && prev < photos.length - 1 ? prev + 1 : 0));
+        }
+      } else {
+        if (e.key === 'Escape') onClose();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [lightboxIndex, onClose, photos.length]);
 
   // Prevent background body scrolling when modal is open
   useEffect(() => {
@@ -142,8 +191,13 @@ export default function CategoryCollageModal({
                       }`}
                     />
 
-                    {/* Photo Container with Graceful Fallback */}
-                    <div className="relative aspect-[4/3] w-full rounded-lg bg-stone-100 overflow-hidden border border-stone-200/70 shadow-inner flex items-center justify-center">
+                    {/* Photo Container with Graceful Fallback & Lightbox trigger */}
+                    <button
+                      type="button"
+                      onClick={() => setLightboxIndex(index)}
+                      className="relative aspect-[4/3] w-full rounded-lg bg-stone-100 overflow-hidden border border-stone-200/70 shadow-inner flex items-center justify-center cursor-zoom-in text-left group/photo focus:outline-none focus:ring-2 focus:ring-pistachio-600"
+                      title="Click to view full screen and download"
+                    >
                       <PhotoDisplay photo={photo} categoryMeta={categoryMeta} />
 
                       {photo.isCover && (
@@ -157,7 +211,12 @@ export default function CategoryCollageModal({
                           {photo.dateLabel}
                         </span>
                       )}
-                    </div>
+
+                      {/* Hover zoom indicator */}
+                      <span className="absolute bottom-2 left-2 z-10 px-2 py-0.5 rounded-md bg-stone-900/70 opacity-0 group-hover/photo:opacity-100 backdrop-blur-sm text-cream-100 text-[10px] font-sans tracking-wide transition-opacity flex items-center gap-1">
+                        🔍 View Full
+                      </span>
+                    </button>
 
                     {/* Handwritten Caption & Sticky Note Comment */}
                     <div className="flex flex-col gap-1.5 px-1 pt-1">
@@ -190,6 +249,114 @@ export default function CategoryCollageModal({
             )}
           </div>
         </motion.div>
+
+        {/* Full-Screen Lightbox Modal */}
+        {lightboxIndex !== null && photos[lightboxIndex] && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-[60] bg-black/95 flex flex-col justify-between p-4 sm:p-6 backdrop-blur-lg select-none"
+          >
+            {/* Lightbox Header Bar */}
+            <header className="w-full flex items-center justify-between z-10">
+              <div className="flex items-center gap-2 text-stone-300 text-xs font-mono">
+                <span className="px-2 py-1 rounded bg-stone-800 border border-stone-700">
+                  {lightboxIndex + 1} / {photos.length}
+                </span>
+                <span className="font-sans font-medium text-cream-200 hidden sm:inline">
+                  {categoryMeta.title}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDownload(photos[lightboxIndex])}
+                  className="px-3.5 py-1.5 rounded-full bg-stone-800 hover:bg-stone-700 text-cream-100 flex items-center gap-1.5 text-xs font-medium border border-stone-700 transition-colors shadow focus:outline-none focus:ring-2 focus:ring-pistachio-500"
+                  title="Download photograph"
+                >
+                  <span aria-hidden>📥</span> Download
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLightboxIndex(null)}
+                  className="w-8 h-8 rounded-full bg-stone-800 hover:bg-stone-700 text-cream-100 flex items-center justify-center text-sm font-bold border border-stone-700 transition-colors shadow focus:outline-none focus:ring-2 focus:ring-pistachio-500"
+                  aria-label="Close photo preview"
+                >
+                  ✕
+                </button>
+              </div>
+            </header>
+
+            {/* Lightbox Body (Image & Arrows) */}
+            <div className="relative flex-1 flex items-center justify-center w-full my-2">
+              {photos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightboxIndex((prev) =>
+                      prev !== null && prev > 0 ? prev - 1 : photos.length - 1
+                    )
+                  }
+                  className="absolute left-2 sm:left-4 z-20 w-11 h-11 rounded-full bg-stone-800/80 hover:bg-stone-700 text-cream-100 flex items-center justify-center text-2xl transition-colors shadow-lg border border-stone-700/80 focus:outline-none"
+                  aria-label="Previous photo"
+                >
+                  ‹
+                </button>
+              )}
+
+              <div className="max-h-[75vh] max-w-[90vw] flex items-center justify-center">
+                {photos[lightboxIndex].imageUrl ? (
+                  <img
+                    src={photos[lightboxIndex].imageUrl}
+                    alt={photos[lightboxIndex].caption}
+                    className="max-h-[75vh] max-w-[90vw] object-contain rounded-lg shadow-2xl border border-stone-800/80"
+                  />
+                ) : (
+                  <div className="p-12 text-center bg-stone-900 text-cream-100 rounded-xl flex flex-col items-center gap-3 border border-stone-800">
+                    <span className="text-5xl">{categoryMeta.icon}</span>
+                    <p className="font-script text-2xl max-w-sm">{photos[lightboxIndex].caption}</p>
+                    <span className="text-xs text-stone-400 font-mono">[Image Unavailable]</span>
+                  </div>
+                )}
+              </div>
+
+              {photos.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setLightboxIndex((prev) =>
+                      prev !== null && prev < photos.length - 1 ? prev + 1 : 0
+                    )
+                  }
+                  className="absolute right-2 sm:right-4 z-20 w-11 h-11 rounded-full bg-stone-800/80 hover:bg-stone-700 text-cream-100 flex items-center justify-center text-2xl transition-colors shadow-lg border border-stone-700/80 focus:outline-none"
+                  aria-label="Next photo"
+                >
+                  ›
+                </button>
+              )}
+            </div>
+
+            {/* Lightbox Footer (Caption & Metadata) */}
+            <footer className="w-full text-center py-2 flex flex-col items-center gap-1 z-10">
+              <p className="font-script text-2xl sm:text-3xl text-cream-100 drop-shadow leading-snug">
+                {photos[lightboxIndex].caption}
+              </p>
+              {photos[lightboxIndex].comments && (
+                <p className="text-xs sm:text-sm font-serif italic text-cream-300/80 max-w-xl">
+                  &ldquo;{photos[lightboxIndex].comments}&rdquo;
+                </p>
+              )}
+              {photos[lightboxIndex].dateLabel && (
+                <span className="text-[10px] font-mono text-stone-400 tracking-wider">
+                  {photos[lightboxIndex].dateLabel}
+                </span>
+              )}
+            </footer>
+          </motion.div>
+        )}
       </div>
     </AnimatePresence>
   );

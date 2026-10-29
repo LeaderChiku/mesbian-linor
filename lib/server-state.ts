@@ -96,7 +96,9 @@ export function ensureSessionState(): StorySessionState {
       sessionStatus: cachedState?.sessionStatus || 'scheduled',
       currentSectionId: cachedState?.currentSectionId || STORY_SECTIONS[0].id,
       currentSectionIndex: cachedState?.currentSectionIndex ?? 0,
-      unlockedChapterIndex: cachedState?.unlockedChapterIndex ?? cachedState?.currentSectionIndex ?? 0,
+      unlockedChapterIndex: typeof cachedState?.unlockedChapterIndex === 'number'
+        ? cachedState.unlockedChapterIndex
+        : 0,
       totalSections: STORY_SECTIONS.length,
       selectedEnding: cachedState?.selectedEnding || null,
       isBlackScreen: cachedState?.isBlackScreen ?? false,
@@ -130,12 +132,165 @@ if (!global.__mbl_subscribers) {
   global.__mbl_subscribers = new Set();
 }
 
+export type AdminAction =
+  | { type: 'SET_SCHEDULE'; scheduledAt: string | null }
+  | { type: 'SET_VISITOR_CODE'; code: string }
+  | { type: 'NAVIGATE'; sectionIndex: number; unlockedChapterIndex?: number }
+  | { type: 'AUDIO_CONTROL'; command: 'play' | 'pause' | 'resume' | 'stop'; audioId?: string; volume?: number; audioType?: 'music' | 'voice_note' }
+  | { type: 'SET_SESSION_STATUS'; status: 'scheduled' | 'active' | 'paused' | 'ended' }
+  | { type: 'SET_BLACK_SCREEN'; enabled: boolean }
+  | { type: 'SET_ENDING'; ending: 'ending-a' | 'ending-b' | 'ending-c' | null }
+  | { type: 'SET_TWIST'; enabled: boolean }
+  | { type: 'TRIGGER_READY_TO_BEGIN'; message?: string }
+  | { type: 'DISMISS_NOTIFICATION'; id: string }
+  | { type: 'CLEAR_NOTIFICATIONS' }
+  | { type: 'UPDATE_CMS'; data: Record<string, string> }
+  | { type: 'REPORT_AUDIO_STATE'; state: 'playing' | 'paused' | 'stopped' | 'ducked' | 'ready' }
+  | { type: 'SET_DEV_TOOLS'; enabled: boolean };
+
 /**
- * Asynchronously sync current state with Supabase database.
+ * Persist only the specific columns mutated by an administrative action to Supabase.
+ * Uses targeted SQL UPDATE statements so updating one field (e.g. CMS) NEVER overwrites
+ * unrelated fields (e.g. countdown schedule).
+ */
+export async function persistActionToSupabase(
+  action: AdminAction,
+  state: StorySessionState
+): Promise<boolean> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return true; // Offline / dev mode succeeds locally
+
+  try {
+    const updatePayload: Record<string, unknown> = {
+      command_seq: state.commandSeq,
+      last_command: state.lastCommand,
+      updated_at: new Date().toISOString(),
+    };
+
+    switch (action.type) {
+      case 'SET_SCHEDULE':
+        updatePayload.scheduled_at = state.scheduledAt;
+        break;
+
+      case 'UPDATE_CMS':
+        updatePayload.cms_data = state.cmsData;
+        break;
+
+      case 'NAVIGATE':
+        updatePayload.current_section_id = state.currentSectionId;
+        updatePayload.current_section_index = state.currentSectionIndex;
+        updatePayload.unlocked_chapter_index = state.unlockedChapterIndex;
+        break;
+
+      case 'SET_ENDING':
+        updatePayload.selected_ending = state.selectedEnding;
+        updatePayload.unlocked_chapter_index = state.unlockedChapterIndex;
+        break;
+
+      case 'SET_DEV_TOOLS':
+        updatePayload.show_dev_tools = state.showDevTools;
+        break;
+
+      case 'SET_TWIST':
+        updatePayload.is_twist_active = state.isTwistActive;
+        break;
+
+      case 'SET_SESSION_STATUS':
+        updatePayload.session_status = state.sessionStatus;
+        break;
+
+      case 'SET_BLACK_SCREEN':
+        updatePayload.is_black_screen = state.isBlackScreen;
+        break;
+
+      case 'TRIGGER_READY_TO_BEGIN':
+      case 'DISMISS_NOTIFICATION':
+      case 'CLEAR_NOTIFICATIONS':
+        updatePayload.ready_to_begin_at = state.readyToBeginAt;
+        updatePayload.notifications = state.notifications;
+        break;
+
+      case 'AUDIO_CONTROL':
+        updatePayload.audio_command = state.audioCommand;
+        updatePayload.selected_audio_id = state.selectedAudioId;
+        updatePayload.audio_volume = state.audioVolume;
+        updatePayload.audio_type = state.audioType;
+        break;
+
+      case 'REPORT_AUDIO_STATE':
+        return true;
+
+      default:
+        break;
+    }
+
+    const { error, count } = await supabase
+      .from('story_sessions')
+      .update(updatePayload, { count: 'exact' })
+      .eq('session_id', 'session_primary');
+
+    if (error) {
+      console.warn('[supabase partial update warning]:', error.message);
+      // Retry without Phase 5 columns if schema does not support them
+      if (updatePayload.show_dev_tools !== undefined || updatePayload.is_twist_active !== undefined) {
+        delete updatePayload.show_dev_tools;
+        delete updatePayload.is_twist_active;
+        const retryResult = await supabase
+          .from('story_sessions')
+          .update(updatePayload, { count: 'exact' })
+          .eq('session_id', 'session_primary');
+        if (!retryResult.error) return true;
+      }
+      return false;
+    }
+
+    // If row does not exist yet, seed initial authoritative session record
+    if (count === 0) {
+      const fullSeed = {
+        session_id: 'session_primary',
+        story_title: state.storyTitle,
+        scheduled_at: state.scheduledAt,
+        session_status: state.sessionStatus,
+        current_section_id: state.currentSectionId,
+        current_section_index: state.currentSectionIndex,
+        unlocked_chapter_index: state.unlockedChapterIndex ?? 0,
+        total_sections: state.totalSections,
+        selected_ending: state.selectedEnding,
+        is_black_screen: state.isBlackScreen,
+        is_twist_active: state.isTwistActive ?? false,
+        show_dev_tools: state.showDevTools ?? false,
+        ready_to_begin_at: state.readyToBeginAt,
+        notifications: state.notifications,
+        cms_data: state.cmsData,
+        selected_audio_id: state.selectedAudioId,
+        audio_command: state.audioCommand,
+        audio_state: state.audioState,
+        audio_type: state.audioType,
+        audio_volume: state.audioVolume,
+        command_seq: state.commandSeq,
+        last_command: state.lastCommand,
+        updated_at: new Date().toISOString(),
+      };
+      const insertResult = await supabase.from('story_sessions').insert(fullSeed);
+      if (insertResult.error) {
+        console.error('[supabase insert error]:', insertResult.error.message);
+        return false;
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('[supabase persist action exception]:', err);
+    return false;
+  }
+}
+
+/**
+ * Sync full session state with Supabase database (compatible with legacy callers).
  */
 export async function syncSessionWithSupabase(state: StorySessionState): Promise<boolean> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return true; // Offline / dev mode succeeds locally
+  if (!supabase) return true;
 
   try {
     const fullPayload = {
@@ -171,7 +326,6 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
 
     if (error) {
       console.warn('[supabase sync warning, trying phase4 fallback]:', error.message);
-      // Fallback 1: Phase 4 schema (includes cms_data, twist, notifications, without show_dev_tools or new audio)
       const phase4Payload = {
         session_id: state.sessionId,
         story_title: state.storyTitle,
@@ -198,7 +352,6 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
       );
       if (fallbackResult.error) {
         console.warn('[supabase sync warning, trying cms+schedule fallback]:', fallbackResult.error.message);
-        // Fallback 2: Essential schedule + cms_data
         const cmsSchedulePayload = {
           session_id: state.sessionId,
           scheduled_at: state.scheduledAt,
@@ -210,7 +363,6 @@ export async function syncSessionWithSupabase(state: StorySessionState): Promise
           .upsert(cmsSchedulePayload, { onConflict: 'session_id' });
 
         if (minimalCmsUpsert.error) {
-          // Fallback 3: Minimal upsert with just session_id and scheduled_at (only if cms_data column doesn't exist)
           const minimalUpsert = await supabase
             .from('story_sessions')
             .upsert(
@@ -263,8 +415,6 @@ export async function loadSessionFromSupabase(): Promise<Partial<StorySessionSta
     if (typeof data.current_section_index === 'number') loaded.currentSectionIndex = data.current_section_index;
     if (typeof data.unlocked_chapter_index === 'number') {
       loaded.unlockedChapterIndex = data.unlocked_chapter_index;
-    } else if (typeof data.current_section_index === 'number') {
-      loaded.unlockedChapterIndex = data.current_section_index;
     }
     if (typeof data.total_sections === 'number') loaded.totalSections = data.total_sections;
     if (data.selected_ending !== undefined) loaded.selectedEnding = data.selected_ending;
@@ -293,12 +443,14 @@ export async function loadSessionFromSupabase(): Promise<Partial<StorySessionSta
 }
 
 /**
- * Get current server-authoritative session state, hydrating from Supabase on cold start.
+ * Get current server-authoritative session state.
+ * Always queries Supabase database when available to guarantee cross-instance
+ * state synchronization across Vercel serverless functions.
  */
 export async function getAuthoritativeSessionState(): Promise<StorySessionState> {
   ensureSessionState();
-  if (!global.__mbl_has_hydrated) {
-    global.__mbl_has_hydrated = true;
+  const supabase = getSupabaseServerClient();
+  if (supabase) {
     try {
       const dbState = await loadSessionFromSupabase();
       if (dbState && global.__mbl_session_state) {
@@ -368,21 +520,7 @@ export function broadcastStateUpdate(newState: StorySessionState): void {
  * Apply an administrative command to update session state.
  */
 export function applyAdminCommand(
-  action:
-    | { type: 'SET_SCHEDULE'; scheduledAt: string | null }
-    | { type: 'SET_VISITOR_CODE'; code: string }
-    | { type: 'NAVIGATE'; sectionIndex: number; unlockedChapterIndex?: number }
-    | { type: 'AUDIO_CONTROL'; command: 'play' | 'pause' | 'resume' | 'stop'; audioId?: string; volume?: number; audioType?: 'music' | 'voice_note' }
-    | { type: 'SET_SESSION_STATUS'; status: 'scheduled' | 'active' | 'paused' | 'ended' }
-    | { type: 'SET_BLACK_SCREEN'; enabled: boolean }
-    | { type: 'SET_ENDING'; ending: 'ending-a' | 'ending-b' | 'ending-c' | null }
-    | { type: 'SET_TWIST'; enabled: boolean }
-    | { type: 'TRIGGER_READY_TO_BEGIN'; message?: string }
-    | { type: 'DISMISS_NOTIFICATION'; id: string }
-    | { type: 'CLEAR_NOTIFICATIONS' }
-    | { type: 'UPDATE_CMS'; data: Record<string, string> }
-    | { type: 'REPORT_AUDIO_STATE'; state: 'playing' | 'paused' | 'stopped' | 'ducked' | 'ready' }
-    | { type: 'SET_DEV_TOOLS'; enabled: boolean }
+  action: AdminAction
 ): { success: boolean; state: StorySessionState; error?: string } {
   ensureSessionState();
   global.__mbl_has_hydrated = true;
@@ -459,6 +597,10 @@ export function applyAdminCommand(
 
     case 'SET_ENDING': {
       current.selectedEnding = action.ending;
+      if (action.ending) {
+        // Automatically ensure Chapter IV is unlocked so visitor can view the ending letter
+        current.unlockedChapterIndex = Math.max(current.unlockedChapterIndex ?? 0, 4);
+      }
       current.commandSeq += 1;
       current.lastCommand = `SET_ENDING_${action.ending ?? 'NONE'}`;
       break;
@@ -534,9 +676,9 @@ export function applyAdminCommand(
   // Broadcast to all active SSE subscribers immediately
   broadcastStateUpdate({ ...current });
 
-  // Asynchronously sync to Supabase database without blocking
-  syncSessionWithSupabase({ ...current }).catch((err) => {
-    console.warn('Background Supabase sync error:', err);
+  // Asynchronously persist partial action to Supabase without blocking
+  persistActionToSupabase(action, { ...current }).catch((err) => {
+    console.warn('Background Supabase action persist error:', err);
   });
 
   return { success: true, state: { ...current } };

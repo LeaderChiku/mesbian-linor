@@ -1,7 +1,7 @@
 {
   "sessionId": "session_primary",
   "storyTitle": "A Story for You",
-  "scheduledAt": "2026-10-30T12:55:45.795Z",
+  "scheduledAt": null,
   "sessionStatus": "scheduled",
   "currentSectionId": "hero",
   "currentSectionIndex": 0,
@@ -11,14 +11,14 @@
   "isBlackScreen": false,
   "isTwistActive": false,
   "showDevTools": false,
-  "readyToBeginAt": "2026-10-29T12:54:57.900Z",
+  "readyToBeginAt": "2026-10-29T16:46:12.522Z",
   "notifications": [],
   "cmsData": {
-    "heroTitle": "Mesbian Linor Story for You",
+    "heroTitle": "Preserved Value",
     "twistWish": "My wish has always been you.",
-    "letterTitle": "A Chapter We Write Together",
+    "letterTitle": "New Letter Title",
     "twistTitle": "A Confession",
-    "endingAWish": "I wish you endless joy and laughter.",
+    "endingAWish": "Stay warm and be loved.",
     "letterSignature": "With All My Heart",
     "heroDedication": "Forever & Always"
   },
@@ -27,7 +27,7 @@
   "audioState": "ready",
   "audioType": "music",
   "audioVolume": 65,
-  "commandSeq": 1406,
-  "lastCommand": "UPDATE_CMS",
-  "updatedAt": "2026-10-29T12:55:45.797Z"
+  "commandSeq": 1692,
+  "lastCommand": "DEV_TOOLS_OFF",
+  "updatedAt": "2026-10-29T16:46:24.085Z"
 }
